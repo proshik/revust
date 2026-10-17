@@ -122,8 +122,13 @@ def main():
             for file in sorted(p for p in package.rglob('*') if p.is_file() and p.name != 'SHA256SUMS'):
                 sums.write(digest(file) + '  ' + file.relative_to(package).as_posix() + '\n')
         artifact = output / (name + '.tar.gz')
+        def portable_member(member):
+            member.uid = member.gid = 0
+            member.uname = member.gname = 'root'
+            return member
+
         with tarfile.open(artifact, 'w:gz') as archive:
-            archive.add(package, arcname=name)
+            archive.add(package, arcname=name, filter=portable_member)
         (output / 'build.json').write_text(json.dumps(receipt, indent=2) + '\n')
         (output / 'SHA256SUMS').write_text(''.join(digest(file) + '  ' + file.name + '\n'
                                                 for file in (source_archive, artifact, output / 'build.json')))
