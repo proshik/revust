@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 — Unreleased
+
+- Update serde_json to 1.0.154, sha2 to 0.11.1, and serde-saphyr/granit-parser to 2.0.0.
+- Validate full source history and distribution archives during CI and packaging.
+
 ## 0.1.0 — 2026-10-17
 
 - OpenCode 2.x version admission and separate protocol compatibility diagnostics.

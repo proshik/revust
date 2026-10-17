@@ -822,7 +822,7 @@ dependencies = [
 
 [[package]]
 name = "revust"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "nix",
@@ -834,7 +834,7 @@ dependencies = [
 
 [[package]]
 name = "revust-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "nix",
@@ -846,7 +846,7 @@ dependencies = [
 
 [[package]]
 name = "revust-executors"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "nix",
  "revust-core",
@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "revust-tui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "crossterm",
