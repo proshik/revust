@@ -7,7 +7,9 @@ is `aarch64-apple-darwin`; do not advertise other platforms from source portabil
 
 ## Candidate gates
 
-1. Complete the checks in [CONTRIBUTING](../CONTRIBUTING.md) with controlled
+1. Validate full source history with `scripts/check-distribution.py` and run its
+   regressions in `tests/compat/distribution_checks.py`. Review each manifest
+   change as a product-file decision. Complete the checks in [CONTRIBUTING](../CONTRIBUTING.md) with controlled
    executors. Ordinary CI must not use provider credentials or real models.
 2. Check the complete package from an exact committed snapshot, including notices,
    helpers, skill resources, executable permissions and dynamic library links.
@@ -33,7 +35,9 @@ Do not claim signatures, attestations or byte reproducibility without supplying
 and verifying that evidence.
 
 Record the final commit, tag, release notes and checksums. Require passing
-hosted CI before publishing the tag and exact assets.
+hosted CI and `scripts/check-distribution.py --artifacts DIRECTORY` before
+publishing the tag and exact assets. Publish only the two archives, build.json
+and SHA256SUMS; retain build.log locally.
 Never silently replace a published version's asset with different bytes.
 
 ## Homebrew

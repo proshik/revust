@@ -11,7 +11,18 @@ shasum -a 256 -c SHA256SUMS
 ```
 
 The output includes revust-source.tar.gz, a target-named payload, build.log,
-build.json and SHA256SUMS. The payload contains bin/revust, helpers, packaged
+build.json and SHA256SUMS. The helper validates the selected full Git history
+before invoking Cargo and validates both archives before reporting success.
+Product files are selected by `distribution.json`; unknown files, personal
+commit email, developer home/build paths, unsafe archive entries and nonportable
+ownership metadata fail validation. Dependency notices remain required.
+`build.log` is a local diagnostic and is excluded from uploaded release artifacts.
+You can repeat the read-only check from the source checkout:
+
+```sh
+python3 -B scripts/check-distribution.py --artifacts /tmp/revust-candidate
+```
+The payload contains bin/revust, helpers, packaged
 workflow skill, docs, Cargo.lock and product/dependency/Rust notices. build.json
 pins revision, target, toolchain, source/binary/lockfile checksums. Unpack into an
 owned temporary directory and verify the internal SHA256SUMS too.

@@ -21,6 +21,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - name: Distribution policy regressions and full source history
+        run: |
+          python3 -B tests/compat/distribution_checks.py
+          python3 -B scripts/check-distribution.py
       - name: Select qualified Rust toolchain
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy

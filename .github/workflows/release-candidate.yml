@@ -14,6 +14,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - name: Distribution policy regressions and full source history
+        run: |
+          python3 -B tests/compat/distribution_checks.py
+          python3 -B scripts/check-distribution.py
       - name: Select qualified Rust toolchain and notices
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy --component rust-docs
@@ -32,8 +37,9 @@ jobs:
           python3 -B tests/compat/input_disconnect_checks.py
       - name: Package exact selected commit
         run: python3 scripts/package-local.py --output .local/release-candidate
-      - name: Verify checksums and packaged public PTY behavior
+      - name: Verify distribution policy, checksums and packaged public PTY behavior
         run: |
+          python3 -B scripts/check-distribution.py --artifacts .local/release-candidate
           cd .local/release-candidate
           shasum -a 256 -c SHA256SUMS
           archive=(revust-*-aarch64-apple-darwin.tar.gz)
@@ -50,6 +56,5 @@ jobs:
             .local/release-candidate/*.tar.gz
             .local/release-candidate/SHA256SUMS
             .local/release-candidate/build.json
-            .local/release-candidate/build.log
           if-no-files-found: error
           retention-days: 14

@@ -28,3 +28,10 @@ qualification and have not been run for the rewritten candidate. Never infer
 account/model access, credential probes or a new budget from their existence.
 All public fixtures are synthetic or separately identified provider protocol data;
 no personal profiles, secrets or review archives are test inputs.
+
+`distribution_checks.py` exercises the distribution validator with disposable Git
+histories and archives. It covers historical metadata, unapproved files even
+with recomputed checksums, dependency notice retention, source/receipt identity,
+local build paths, unsafe entries and portable ownership. It uses no user data,
+provider CLI or Cargo compilation. Release preparation additionally validates the
+real built archives before upload.

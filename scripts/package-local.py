@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import shlex
 import subprocess
+import sys
 import tarfile
 import tempfile
 
@@ -27,6 +28,9 @@ def main():
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
     revision = run(['git', '-C', str(repo), 'rev-parse', '--verify', '--end-of-options', args.revision + '^{commit}'])
+    validator = [sys.executable, '-B', str(repo / 'scripts/check-distribution.py'),
+                 '--repo', str(repo), '--revision', revision]
+    subprocess.run(validator, check=True)
     host = next(line[6:] for line in run(['rustc', '-vV']).splitlines() if line.startswith('host: '))
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -61,29 +65,13 @@ def main():
         (package / 'bin').mkdir(parents=True)
         binary = package / 'bin/revust'
         shutil.copy2(Path(environment['CARGO_TARGET_DIR']) / host / 'release/revust', binary)
-        # Product files are an explicit distribution manifest. Repository-local
-        # workflow files are never copied through a whole-tree documentation walk.
-        for item in ('README.md', 'LICENSE', 'Cargo.lock', 'scripts', 'third_party', 'integrations'):
+        # Only deliberately reviewed product files enter the runtime payload.
+        distribution = json.loads((source / 'distribution.json').read_text())
+        for item in distribution['payload']:
             path = source / item
-            if path.is_dir():
-                shutil.copytree(path, package / item)
-            else:
-                shutil.copy2(path, package / item)
-        for item in ('CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md',
-                     'tests/compat/README.md', 'docs/acceptance.md',
-                     'docs/archives.md', 'docs/attribution.md', 'docs/configuration.md',
-                     'docs/design.md', 'docs/executor-protocols.json',
-                     'docs/executor-protocols.md', 'docs/extensions-v1.md',
-                     'docs/hosts.md', 'docs/installation.md', 'docs/local-packaging.md',
-                     'docs/releases.md', 'docs/usage.md',
-                     'docs/requirements/review-configuration/spec.md',
-                     'docs/requirements/standalone-review-runtime/spec.md'):
-            path = source / item
-            if path.is_dir():
-                shutil.copytree(path, package / item)
-            elif path.is_file():
-                (package / item).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, package / item)
+            destination = package / item
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
         used = {node['id'] for node in metadata['resolve']['nodes']}
         dependencies = []
         notices = package / 'third_party/cargo'
@@ -132,6 +120,7 @@ def main():
         (output / 'build.json').write_text(json.dumps(receipt, indent=2) + '\n')
         (output / 'SHA256SUMS').write_text(''.join(digest(file) + '  ' + file.name + '\n'
                                                 for file in (source_archive, artifact, output / 'build.json')))
+    subprocess.run([*validator, '--artifacts', str(output)], check=True)
     print(output)
 
 

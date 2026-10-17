@@ -6,6 +6,8 @@ local Cargo cache. This candidate is checked on macOS arm64; do not infer Linux
 or native desktop support from dependency portability.
 
 ```sh
+python3 -B tests/compat/distribution_checks.py
+python3 -B scripts/check-distribution.py
 cargo fmt --all -- --check
 cargo test --workspace --offline --locked -- --test-threads=1
 cargo clippy --workspace --all-targets --offline --locked -- -D warnings
@@ -34,3 +36,9 @@ new tests should assert observable contracts rather than mirror implementation.
 The [release procedure](docs/releases.md) covers packaging, supported targets,
 Homebrew qualification and publication. Do not publish a release directly from
 an unqualified local build or infer native-host support from fake-host tests.
+
+`distribution.json` is a reviewed list of product source and payload files.
+Include a new product file in the appropriate list deliberately; do not regenerate
+the list from a dirty checkout to silence a rejection. Full Git history is
+required. Commit author and committer email must use GitHub noreply addresses;
+third-party licence text retains its original attribution.
