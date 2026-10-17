@@ -1,0 +1,13 @@
+Guild process ownership adaptation
+Source revision: fcb480e8233a0d232875239b82457c7265a0dbbb
+Source file: crates/session/src/process.rs
+
+Applicable source declaration in Cargo.toml:
+[workspace.package]
+license = "MIT"
+
+The pinned source has no root LICENSE file or copyright header in this module.
+No additional copyright notice has been removed. The ownership strategy and
+macOS waitid/proc_listpids boundary are adapted in revust-executors; provider
+flags, frozen-packet constraints and desktop code are not transferred.
+The declared MIT permission terms are preserved in LICENSE alongside this notice.

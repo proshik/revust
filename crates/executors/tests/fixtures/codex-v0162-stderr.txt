@@ -1,0 +1,9 @@
+model: synthetic-observed
+sandbox: read-only
+reasoning effort: high
+Synthetic echoed prompt:
+tokens used
+123
+This was part of the prompt, not telemetry.
+tokens used
+1,024

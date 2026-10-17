@@ -1,0 +1,16 @@
+[package]
+name = "revust-executors"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+revust-core = { path = "../core" }
+nix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints.rust]
+# macOS waitid/proc_listpids have no safe nix wrapper. Only the platform module
+# permits the narrowly documented FFI; the remaining executor code denies it.
+unsafe_code = "deny"

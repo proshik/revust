@@ -1,0 +1,55 @@
+name: Release candidate
+# Explicit manual preparation only: no release, tag, tap write or installation.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: "1.98.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select qualified Rust toolchain and notices
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy --component rust-docs
+      - run: cargo fetch --locked
+      - run: cargo fmt --all -- --check
+      - run: cargo test --workspace --offline --locked -- --test-threads=1
+      - run: cargo clippy --workspace --offline --locked --all-targets -- -D warnings
+      - run: cargo build --workspace --all-targets --offline --locked
+      - name: Controlled helpers, hosts and terminal ownership
+        run: |
+          python3 -B tests/compat/helper_observation_checks.py
+          for check in tests/compat/*_launcher_checks.py; do
+            python3 -B "$check"
+          done
+          python3 -B tests/compat/terminal_session_checks.py
+          python3 -B tests/compat/input_disconnect_checks.py
+      - name: Package exact selected commit
+        run: python3 scripts/package-local.py --output .local/release-candidate
+      - name: Verify checksums and packaged public PTY behavior
+        run: |
+          cd .local/release-candidate
+          shasum -a 256 -c SHA256SUMS
+          archive=(revust-*-aarch64-apple-darwin.tar.gz)
+          test "${#archive[@]}" -eq 1
+          tar -xzf "${archive[0]}"
+          cd "${archive[0]%.tar.gz}"
+          shasum -a 256 -c SHA256SUMS
+          ./bin/revust --version
+          REVUST_TEST_BINARY="$PWD/bin/revust" python3 "$GITHUB_WORKSPACE/tests/compat/public_tui_checks.py"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: revust-macos-arm64-${{ github.sha }}
+          path: |
+            .local/release-candidate/*.tar.gz
+            .local/release-candidate/SHA256SUMS
+            .local/release-candidate/build.json
+            .local/release-candidate/build.log
+          if-no-files-found: error
+          retention-days: 14

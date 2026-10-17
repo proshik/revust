@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "scope": "Protocol identity pins only; rewritten candidate actual CLI acceptance unrun",
+  "executors": [
+    {
+      "name": "claude",
+      "version": "2.1.296",
+      "binary_sha256": "c9b5341637becbd423ddffc5b254afb645682a3868cb708bbc6cc0e7bb419937"
+    },
+    {
+      "name": "codex",
+      "version": "0.162.1",
+      "binary_sha256": "74c6a6d263f40d65f99c27a815275f5b4ed0bcc2baecc396b4cf3255498bdfc0"
+    },
+    {
+      "name": "opencode",
+      "version": "2.0.21",
+      "binary_sha256": "0b2b68c1efaf20a29aaf636c2ffccc1abb56243a82f48cce45e257d232e03442"
+    }
+  ],
+  "fixtures": [
+    {
+      "path": "crates/executors/tests/fixtures/claude-v2-stream.jsonl",
+      "sha256": "905ffe8b76046f014cddb9db3e232b1823dc3126ba26f4fd5cb98aaeb5dbc1f0",
+      "kind": "synthetic protocol input"
+    },
+    {
+      "path": "crates/executors/tests/fixtures/codex-v0162-stderr.txt",
+      "sha256": "15a6c868717154bd13003136f8072f3044ff6d3b8fb17849cceede405f624ed6",
+      "kind": "synthetic protocol input"
+    },
+    {
+      "path": "crates/executors/tests/fixtures/opencode-v2021-unavailable.json",
+      "sha256": "39042c2e3478f2559928ce2418c54107199a47830b4d11d6cc16719be205b657",
+      "kind": "observed credential-free unavailable-model error; timestamp and session ID removed"
+    },
+    {
+      "path": "crates/executors/tests/fixtures/opencode-v2021-tools.jsonl",
+      "sha256": "39f99b8aa32b72f035580973e6d4e8c16c204567ed16d17e79a6d681e7377737",
+      "kind": "observed local stub read/write/final events; identifiers and timestamps normalized"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+--- a/src/event/source/unix/tty.rs
++++ b/src/event/source/unix/tty.rs
+@@ -80,21 +80,18 @@
+     }
+ }
+ 
+-/// read_complete reads from a non-blocking file descriptor
+-/// until the buffer is full or it would block.
+-///
+-/// Similar to `std::io::Read::read_to_end`, except this function
+-/// only fills the given buffer and does not read beyond that.
++/// Reads once from a ready terminal or a non-blocking signal pipe.
++/// EOF is terminal loss; WouldBlock is temporary absence of data. Interruption
++/// returns to the public reader so its caller can check cancellation.
+ fn read_complete(fd: &FileDesc, buf: &mut [u8]) -> io::Result<usize> {
+-    loop {
+-        match fd.read(buf) {
+-            Ok(x) => return Ok(x),
+-            Err(e) => match e.kind() {
+-                io::ErrorKind::WouldBlock => return Ok(0),
+-                io::ErrorKind::Interrupted => continue,
+-                _ => return Err(e),
+-            },
+-        }
++    match fd.read(buf) {
++        Ok(0) => Err(io::Error::new(
++            io::ErrorKind::UnexpectedEof,
++            "terminal input closed",
++        )),
++        Ok(x) => Ok(x),
++        Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(0),
++        Err(e) => Err(e),
+     }
+ }
+ 
+@@ -144,23 +141,27 @@
+                 }
+                 Ok(_) => (),
+             };
++            // Only POLLIN was requested; other returned flags include HUP,
++            // ERR and NVAL (the latter is not exported by filedescriptor).
++            if fds[0].revents & !POLLIN != 0 {
++                return Err(io::Error::new(
++                    io::ErrorKind::BrokenPipe,
++                    "terminal input disconnected",
++                ));
++            }
+             if fds[0].revents & POLLIN != 0 {
+-                loop {
+-                    let read_count = read_complete(&self.tty, &mut self.tty_buffer)?;
+-                    if read_count > 0 {
+-                        self.parser.advance(
+-                            &self.tty_buffer[..read_count],
+-                            read_count == TTY_BUFFER_SIZE,
+-                        );
+-                    }
+-
+-                    if let Some(event) = self.parser.next() {
+-                        return Ok(Some(event));
+-                    }
+-
+-                    if read_count == 0 {
+-                        break;
+-                    }
++                // One read per readiness notification. The terminal descriptor can
++                // be blocking: an incomplete escape/paste must return to the
++                // timed poll instead of blocking in a second read.
++                let read_count = read_complete(&self.tty, &mut self.tty_buffer)?;
++                if read_count > 0 {
++                    self.parser.advance(
++                        &self.tty_buffer[..read_count],
++                        read_count == TTY_BUFFER_SIZE,
++                    );
++                }
++                if let Some(event) = self.parser.next() {
++                    return Ok(Some(event));
+                 }
+             }
+             if fds[1].revents & POLLIN != 0 {

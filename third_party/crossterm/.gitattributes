@@ -1,0 +1,6 @@
+# Preserve upstream CRLF bytes and documentation spacing.
+* whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+README.md -whitespace
+examples/README.md -whitespace
+# Unified-diff context lines intentionally contain one space.
+revust-pty.patch -whitespace

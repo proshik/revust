@@ -1,0 +1,21 @@
+[package]
+name = "revust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "revust"
+path = "src/main.rs"
+
+[dependencies]
+revust-core = { path = "../core" }
+serde_json.workspace = true
+revust-executors = { path = "../executors" }
+revust-tui = { path = "../tui" }
+nix.workspace = true
+chrono = { workspace = true, features = ["clock"] }
+
+[lints.rust]
+# Only the CLI signal and terminal modules permit documented OS calls.
+unsafe_code = "deny"

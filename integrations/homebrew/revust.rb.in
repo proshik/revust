@@ -1,0 +1,88 @@
+# Prepared template, not an installable formula. Replace RELEASE_SHA256 only
+# after approving and publishing the exact qualified release archive.
+require "digest"
+
+class Revust < Formula
+  desc "Standalone supervised review CLI with a terminal interface"
+  homepage "https://github.com/proshik/revust"
+  url "https://github.com/proshik/revust/releases/download/v0.1.0/revust-0.1.0-aarch64-apple-darwin.tar.gz"
+  sha256 "RELEASE_SHA256"
+  license "MIT"
+
+  depends_on arch: :arm64
+  depends_on :macos
+  depends_on "python@3.14"
+
+  def install
+    # Keep helpers, build receipt, documentation and all licence notices together.
+    libexec.install Pathname.pwd.children
+    # Supplying prefix metadata prevents Homebrew from moving it out of libexec.
+    cp [libexec/"README.md", libexec/"LICENSE", libexec/"CHANGELOG.md"], prefix
+    python = formula_opt_bin("python@3.14")/"python3.14"
+    %w[launch-revust.sh guild-run.sh preflight.sh task-state.sh].each do |name|
+      inreplace libexec/"scripts"/name, "python3", python.to_s
+    end
+    libexec.glob("scripts/*.py").each do |script|
+      next unless script.read.start_with?("#!/usr/bin/env python3\n")
+
+      inreplace script, "#!/usr/bin/env python3", "#!#{python}"
+    end
+    # Homebrew binds script interpreters; retain download sums and record installed sums.
+    mv libexec/"SHA256SUMS", libexec/"SOURCE_SHA256SUMS"
+    files = Dir.glob("#{libexec}/**/*", File::FNM_DOTMATCH).select { |file| File.file?(file) }.sort
+    (libexec/"SHA256SUMS").write files.map { |file|
+      "#{Digest::SHA256.file(file).hexdigest}  #{Pathname(file).relative_path_from(libexec)}\n"
+    }.join
+    bin.install_symlink libexec/"bin/revust"
+  end
+
+  test do
+    assert_match "revust 0.1.0", shell_output("#{bin}/revust --version")
+    (testpath/"home").mkpath
+    ENV["HOME"] = (testpath/"home").to_s
+    output = shell_output("#{bin}/revust config --runtime-only")
+    assert_match '"paths"', output
+    refute_path_exists testpath/"home/.config/revust"
+
+    # Packaged helpers must use the declared interpreter, even with a hostile PATH.
+    (testpath/"blocked").mkpath
+    (testpath/"blocked/python3").write "#!/bin/sh\nexit 97\n"
+    chmod 0755, testpath/"blocked/python3"
+    ENV["PATH"] = "#{testpath}/blocked:/usr/bin:/bin"
+    ENV["REVUST_BIN"] = (bin/"revust").to_s
+    system bin/"revust", "new", "--task", "example", "--run", "01"
+    (testpath/".revust/tasks/example/01/input/scope.md").write "Inspect synthetic example.rs.\n"
+    plan = shell_output("#{bin}/revust dry-run --task example --run 01 --profile focused")
+    assert_match "revust-contract-v1", plan
+    system "/bin/bash", libexec/"scripts/task-state.sh", "example"
+    system libexec/"scripts/analyze-corpus.py", "--json"
+
+    (testpath/"saved").mkpath
+    (testpath/"saved/findings.json").write <<~JSON
+      {"scope":{"task":"saved","run":"01"},"findings":[{"id":"example-1","title":"Synthetic finding","sources":["example"]}]}
+    JSON
+    (testpath/"saved/manifest.json").write <<~JSON
+      {"task":"saved","run":"01","finished_at":"2026-10-17T09:00:00Z"}
+    JSON
+    (testpath/"saved/events.jsonl").write ""
+    before = (testpath/"saved").children.to_h { |file| [file.basename, file.read] }
+    viewed = shell_output("#{bin}/revust view --archive #{testpath}/saved --no-tui")
+    assert_equal "example-1", JSON.parse(viewed).fetch("findings").first.fetch("id")
+    assert_equal before, (testpath/"saved").children.to_h { |file| [file.basename, file.read] }
+    ["failed", { "stopped" => "cancelled" }].each do |state|
+      outcome = { "state" => state, "policy_failures" => [], "diagnostics" => ["Synthetic failure"] }
+      report = JSON.parse((testpath/"saved/findings.json").read)
+      manifest = JSON.parse((testpath/"saved/manifest.json").read)
+      report["outcome"] = manifest["outcome"] = outcome
+      File.write(testpath/"saved/findings.json", JSON.generate(report))
+      File.write(testpath/"saved/manifest.json", JSON.generate(manifest))
+      before = (testpath/"saved").children.to_h { |file| [file.basename, file.read] }
+      viewed = shell_output("#{bin}/revust view --archive #{testpath}/saved --no-tui", 2)
+      assert_equal outcome, JSON.parse(viewed).fetch("outcome")
+      assert_equal before, (testpath/"saved").children.to_h { |file| [file.basename, file.read] }
+    end
+    cd libexec do
+      system "/usr/bin/shasum", "-a", "256", "-c", "SHA256SUMS"
+    end
+  end
+end

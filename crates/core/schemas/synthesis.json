@@ -1,0 +1,220 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Candidate consolidation",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "findings": {
+      "type": "array",
+      "description": "Change-related actionable candidates.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "merged_ids": {
+            "type": "array",
+            "description": "Input identities represented by this candidate; identities cannot be shared across outputs.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "file": {
+            "type": "string",
+            "description": "Repository-relative location associated with the candidate."
+          },
+          "line": {
+            "type": "integer",
+            "description": "Anchor in the file, counted from 1; 0 denotes a file-wide issue.",
+            "minimum": 0
+          },
+          "end_line": {
+            "type": "integer",
+            "description": "Optional inclusive range end; 0 denotes no additional range.",
+            "minimum": 0
+          },
+          "severity": {
+            "type": "string",
+            "description": "Impact classification independent of evidence strength.",
+            "enum": [
+              "critical",
+              "major",
+              "minor"
+            ]
+          },
+          "confidence": {
+            "type": "integer",
+            "description": "Evidence strength as a percentage; agreement is not proof.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "title": {
+            "type": "string",
+            "description": "Concise label for the affected behavior."
+          },
+          "body": {
+            "type": "string",
+            "description": "Trigger, causal explanation, consequence and supporting evidence."
+          },
+          "fix": {
+            "type": "string",
+            "description": "Supported correction, when known."
+          }
+        },
+        "required": [
+          "merged_ids",
+          "file",
+          "line",
+          "severity",
+          "confidence",
+          "title",
+          "body"
+        ]
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "description": "Candidates requiring a missing fact or decision.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "merged_ids": {
+            "type": "array",
+            "description": "Input identities represented by this candidate; identities cannot be shared across outputs.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "file": {
+            "type": "string",
+            "description": "Repository-relative location associated with the candidate."
+          },
+          "line": {
+            "type": "integer",
+            "description": "Anchor in the file, counted from 1; 0 denotes a file-wide issue.",
+            "minimum": 0
+          },
+          "end_line": {
+            "type": "integer",
+            "description": "Optional inclusive range end; 0 denotes no additional range.",
+            "minimum": 0
+          },
+          "severity": {
+            "type": "string",
+            "description": "Impact classification independent of evidence strength.",
+            "enum": [
+              "critical",
+              "major",
+              "minor"
+            ]
+          },
+          "confidence": {
+            "type": "integer",
+            "description": "Evidence strength as a percentage; agreement is not proof.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "title": {
+            "type": "string",
+            "description": "Concise label for the affected behavior."
+          },
+          "body": {
+            "type": "string",
+            "description": "Trigger, causal explanation, consequence and supporting evidence."
+          },
+          "fix": {
+            "type": "string",
+            "description": "Supported correction, when known."
+          }
+        },
+        "required": [
+          "merged_ids",
+          "file",
+          "line",
+          "severity",
+          "confidence",
+          "title",
+          "body"
+        ]
+      }
+    },
+    "pre_existing": {
+      "type": "array",
+      "description": "Defects attributed to behavior before this change.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "merged_ids": {
+            "type": "array",
+            "description": "Input identities represented by this candidate; identities cannot be shared across outputs.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "file": {
+            "type": "string",
+            "description": "Repository-relative location associated with the candidate."
+          },
+          "line": {
+            "type": "integer",
+            "description": "Anchor in the file, counted from 1; 0 denotes a file-wide issue.",
+            "minimum": 0
+          },
+          "end_line": {
+            "type": "integer",
+            "description": "Optional inclusive range end; 0 denotes no additional range.",
+            "minimum": 0
+          },
+          "severity": {
+            "type": "string",
+            "description": "Impact classification independent of evidence strength.",
+            "enum": [
+              "critical",
+              "major",
+              "minor"
+            ]
+          },
+          "confidence": {
+            "type": "integer",
+            "description": "Evidence strength as a percentage; agreement is not proof.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "title": {
+            "type": "string",
+            "description": "Concise label for the affected behavior."
+          },
+          "body": {
+            "type": "string",
+            "description": "Trigger, causal explanation, consequence and supporting evidence."
+          },
+          "fix": {
+            "type": "string",
+            "description": "Supported correction, when known."
+          }
+        },
+        "required": [
+          "merged_ids",
+          "file",
+          "line",
+          "severity",
+          "confidence",
+          "title",
+          "body"
+        ]
+      }
+    }
+  },
+  "required": [
+    "findings",
+    "open_questions",
+    "pre_existing"
+  ]
+}

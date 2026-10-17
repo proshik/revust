@@ -1,0 +1,42 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  macos:
+    name: macOS arm64 controlled checks
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: "1.98.0"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select qualified Rust toolchain
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - run: cargo fetch --locked
+      - run: cargo fmt --all -- --check
+      - run: cargo test --workspace --offline --locked -- --test-threads=1
+      - run: cargo clippy --workspace --offline --locked --all-targets -- -D warnings
+      - run: cargo build --workspace --all-targets --offline --locked
+      - name: Controlled helper and host protocol checks
+        run: |
+          python3 -B tests/compat/helper_observation_checks.py
+          for check in tests/compat/*_launcher_checks.py; do
+            python3 -B "$check"
+          done
+      - name: Public PTY checks with local fake providers
+        run: |
+          python3 -B tests/compat/public_tui_checks.py
+          python3 -B tests/compat/terminal_session_checks.py
+          python3 -B tests/compat/input_disconnect_checks.py

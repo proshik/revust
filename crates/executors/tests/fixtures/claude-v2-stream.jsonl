@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","model":"not-effective-evidence"}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{"}}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Checking\n  unchanged helper."},{"type":"tool_use","name":"Read","input":{"file_path":"/synthetic/project/src/helper.rs"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"StructuredOutput","input":{"findings":[]}}]}}
+{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning"}}
+{"type":"result","structured_output":{"findings":[]},"modelUsage":{"synthetic-z":{"outputTokens":3},"synthetic-a":{"outputTokens":3}},"usage":{"input_tokens":10,"output_tokens":3,"cache_read_input_tokens":4,"cache_creation_input_tokens":2},"ttft_ms":37,"permission_denials":[{"tool_name":"Bash","tool_input":{"command":"first\n second"}},{"tool_name":"Bash","tool_input":{"command":"first second"}}]}

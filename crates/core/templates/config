@@ -1,0 +1,26 @@
+# Optional runtime settings for revust.
+# Assign only values you want to override. Precedence, strongest first:
+# invocation arguments, project .revust/config, user ~/.config/revust/config,
+# embedded settings. Each key resolves independently.
+# Reviewer assignments and review text are configured in prompts/ and lenses/.
+# init can refresh a comment-only config; assignments preserve customization.
+
+# Maximum silence during one provider attempt:
+# idle-timeout = 2m
+# Maximum elapsed time for one attempt (retries start a new attempt):
+# hard-timeout = 20m
+# Delay before followers may start if the first reviewer stays inactive:
+# stagger-delay = 30s
+# Overall concurrent attempt limit:
+# max-parallel = 4
+# Verification partition limit and partition key (dir or source):
+# verify-groups = 6
+# verify-group-by = dir
+# Task storage root, resolved relative to the caller:
+# tasks-dir = ./.revust/tasks
+# UI closure delay after completion; zero keeps it open:
+# auto-exit = 0s
+# Built-in or caller-authored profile ID:
+# profile = comprehensive
+# Codex execution policy; select a broader policy only intentionally:
+# codex-sandbox = read-only

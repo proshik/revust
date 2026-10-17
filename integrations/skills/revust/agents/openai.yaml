@@ -1,0 +1,4 @@
+interface:
+  display_name: "revust"
+  short_description: "Inspect evidence and observe authorized reviews"
+  default_prompt: "Use $revust for the requested review or saved evidence inspection, respecting the selected scope, route and remaining budget."
