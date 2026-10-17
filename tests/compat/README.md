@@ -1,9 +1,8 @@
 # Controlled integration checks
 
-No test in the normal suite builds a sibling source tree or uses a source binary
-oracle. Historical captures/collectors/Go seams are retired to private evidence.
-Rust tests cover typed config, composition, schema, stage ownership, budgets,
-archive containment, read-only reconstruction, process cleanup and widgets.
+Normal tests use synthetic inputs and local fake provider/host CLIs. Rust tests
+cover configuration, composition, schema, stage ownership, budgets, archive
+containment, read-only reconstruction, process cleanup and widgets.
 
 After the workspace all-target build, run each *_launcher_checks.py and
 helper_observation_checks.py with Python 3.9+. They install fake CLIs only inside

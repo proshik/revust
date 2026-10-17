@@ -17,7 +17,7 @@ pins revision, target, toolchain, source/binary/lockfile checksums. Unpack into 
 owned temporary directory and verify the internal SHA256SUMS too.
 
 Inspect expanded archive members, link targets, all uncompressed files and binary
-strings for unwanted historical content. Verify helper/skill/docs links and every
+strings for secrets, local paths and unintended content. Verify helper/skill/docs links and every
 applicable notice. A compressed-byte grep cannot verify source/payload closure.
 Run config/view and controlled tests with the packaged executable in a synthetic
 HOME; do not point them at personal profiles or archives. Preserve logs privately.

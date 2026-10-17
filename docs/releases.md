@@ -15,12 +15,9 @@ is `aarch64-apple-darwin`; do not advertise other platforms from source portabil
    disposable HOME/configuration roots. Check archives remain byte-identical.
 4. Check native host delivery separately and record physical Open run/restart
    coverage. Identify unrun real-provider and platform scenarios explicitly.
-5. Check the source tree, all new Git objects and expanded release assets for
-   private data and prohibited historical content, with private audit inputs.
-
-The initial public history must be created before the final release build. Build
-receipts, source archives and release tags must all refer to that public history.
-Never reuse a pre-rewrite receipt as the identity of the published build.
+5. Check source files, Git metadata and expanded release assets for secrets,
+   personal data and unintended files. Build receipts, source archives and tags
+   must identify the exact published source revision.
 
 ## Build and publication
 
