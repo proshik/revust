@@ -1,9 +1,11 @@
 # Changelog
 
-## 0.1.2 — Unreleased
+## 0.1.3 — 2026-10-19
 
 - Forward caller proxy settings through host launch transactions and isolated
   OpenCode executors, preserving case, empty values and explicit executor overrides.
+
+## 0.1.2 — 2026-10-19
 
 - OpenCode isolated sessions can load providers from a configured JSON/JSONC file
   (`executors.opencode.options.providers_file`), converting an opencode.jsonc
