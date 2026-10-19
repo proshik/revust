@@ -253,6 +253,7 @@
     "tests/compat/kitty_launcher_checks.py",
     "tests/compat/opencode_checks.py",
     "tests/compat/opencode_cli_checks.py",
+    "tests/compat/proxy_forwarding_checks.py",
     "tests/compat/public_tui_checks.py",
     "tests/compat/terminal_launcher_checks.py",
     "tests/compat/terminal_session_checks.py",

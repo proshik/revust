@@ -112,6 +112,21 @@ impl Session {
             ));
         }
         let mut environment = BTreeMap::from([("PATH".into(), "/usr/bin:/bin".into())]);
+        // Preserve transport settings narrowly; explicit executor values below win.
+        for key in [
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "NO_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "no_proxy",
+        ] {
+            if let Ok(value) = std::env::var(key) {
+                environment.insert(key.into(), value);
+            }
+        }
         // File providers form the base layer; env content overrides by ID.
         let mut providers = json!({});
         if let Some(file) = options.get("providers_file") {

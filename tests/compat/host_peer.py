@@ -10,13 +10,18 @@ root = Path(os.environ['PEER_ROOT'])
 case = json.loads((root / 'case.json').read_text())
 role = Path(sys.argv[0]).name
 arguments = sys.argv[1:]
+PROXIES = ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy')
+clean = {key: value for key, value in os.environ.items() if key not in PROXIES}
 with (root / 'trace.jsonl').open('a') as trace:
     trace.write(json.dumps([role, arguments]) + '\n')
 
 if role == 'selected program':
+    if case.get('real_binary'):
+        os.execv(case['real_binary'], [case['real_binary'], *arguments])
     if arguments and arguments[0] == 'config':
         print(json.dumps(case.get('config', {'paths': {'archive': str(root / 'archive')}})))
     else:
+        (root / 'proxy-observed.json').write_text(json.dumps({k: os.environ[k] for k in PROXIES if k in os.environ}))
         with (root / 'deliveries.jsonl').open('a') as output:
             output.write(json.dumps({'args': arguments, 'cwd': os.getcwd()}) + '\n')
         if not case.get('empty'):
@@ -25,8 +30,14 @@ if role == 'selected program':
         sys.exit(case.get('code', 0))
 elif role == 'agtermctl':
     if arguments[:3] == ['session', 'overlay', 'open']:
+        if case.get('host_error'):
+            print('host rejected ' + os.environ.get('https_proxy', ''), file=sys.stderr)
+            sys.exit(7)
         (root / 'overlay.json').write_text(json.dumps(arguments))
-        sys.exit(subprocess.run(['/bin/bash', '-c', arguments[3]]).returncode)
+        import shlex
+        transaction = Path(shlex.split(arguments[3])[0]).parent
+        (root / 'proxy-permissions.json').write_text(json.dumps([transaction.stat().st_mode & 0o777, (transaction / 'request.json').stat().st_mode & 0o777]))
+        sys.exit(subprocess.run(['/bin/bash', '-c', arguments[3]], env=clean).returncode)
     if arguments == ['tree']:
         print(json.dumps({'result': {'tree': {'workspaces': [{'sessions': [
             {'id': 'owned-session', 'background': {'colorHex': '#808080'}}]}]}}}))
@@ -51,8 +62,9 @@ elif role == 'guild':
                 assert json.loads(saved.read_text()) == key, 'retry changed descriptor'
             else:
                 saved.write_text(json.dumps(key))
+                (root / 'proxy-permissions.json').write_text(json.dumps([descriptor_path.parent.stat().st_mode & 0o777, descriptor_path.stat().st_mode & 0o777]))
                 child = subprocess.run([descriptor['program'], *descriptor['args']],
-                                       cwd=descriptor['cwd'], env={**os.environ, **descriptor['env']})
+                                       cwd=descriptor['cwd'], env={**clean, **descriptor['env']})
                 (root / 'exit.json').write_text(str(child.returncode))
                 if case.get('missing_report'):
                     Path(descriptor['args'][1]).unlink()

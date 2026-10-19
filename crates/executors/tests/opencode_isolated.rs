@@ -498,3 +498,81 @@ fn temporary_attempts_have_distinct_owned_homes_removed_on_drop() {
     drop(second);
     assert!(!second_home.parent().unwrap().exists());
 }
+
+#[test]
+fn inherited_proxies_survive_isolation_and_explicit_values_win() {
+    const KEYS: [&str; 8] = [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+    ];
+    if std::env::var("REVUST_PROXY_PROBE").as_deref() != Ok("1") {
+        for mixed in [false, true] {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    "inherited_proxies_survive_isolation_and_explicit_values_win",
+                ])
+                .env("REVUST_PROXY_PROBE", "1");
+            for (index, key) in KEYS.iter().enumerate() {
+                child.env_remove(key);
+                if !mixed || index % 3 != 0 {
+                    child.env(
+                        key,
+                        if mixed {
+                            String::new()
+                        } else {
+                            format!("synthetic-{index}")
+                        },
+                    );
+                }
+            }
+            assert!(
+                child.output().unwrap().status.success(),
+                "isolated proxy preservation failed"
+            );
+        }
+        return;
+    }
+    let tmp = Temp::new();
+    for explicit in [false, true] {
+        let mut body = String::new();
+        for (index, key) in KEYS.iter().enumerate() {
+            let expected = if explicit && index == 0 {
+                Some("override".into())
+            } else {
+                std::env::var(key).ok()
+            };
+            body.push_str(&match expected {
+                Some(value) => format!("test \"${{{key}-missing}}\" = '{value}' || exit 9;\n"),
+                None => format!("test \"${{{key}+present}}\" = '' || exit 9;\n"),
+            });
+        }
+        body.push_str(response());
+        let mut configured = settings(script(&tmp.0, &body));
+        if explicit {
+            configured
+                .environment
+                .insert("HTTP_PROXY".into(), "override".into());
+        }
+        let session = Session::prepare(
+            &tmp.0.join(if explicit { "explicit" } else { "inherited" }),
+            &configured,
+            &json!({}),
+        )
+        .unwrap();
+        let execution = session
+            .run(request(&tmp.0), &control(), |_, _| Ok(()), |_| {})
+            .unwrap();
+        assert!(
+            execution.process.status.unwrap().success(),
+            "proxy environment mismatch"
+        );
+    }
+}

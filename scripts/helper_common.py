@@ -6,6 +6,11 @@ import shutil
 import subprocess
 
 
+PROXY_ENVIRONMENT = ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
+                     'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy')
+FORWARDED = ('PATH', 'HOME', 'XDG_CONFIG_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'TMPDIR') + PROXY_ENVIRONMENT
+
+
 class HelperError(Exception):
     pass
 
@@ -36,8 +41,16 @@ def configuration(*arguments):
         raise HelperError('configuration response is not an object') from error
 
 
+def mask_proxy_values(value):
+    text = str(value)
+    for secret in sorted({os.environ[key] for key in PROXY_ENVIRONMENT if os.environ.get(key)}, key=len, reverse=True):
+        text = text.replace(secret, '[proxy value]')
+    return text
+
+
 def safe(value):
-    return ''.join(ch if ch.isprintable() else '?' for ch in str(value))
+    text = mask_proxy_values(value)
+    return ''.join(ch if ch.isprintable() else '?' for ch in text)
 
 
 def open_readonly(path, directory=False):

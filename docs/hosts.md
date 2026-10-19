@@ -26,3 +26,20 @@ wait receipts cannot switch job identity. Missing capability refuses before revi
 Fake-host tests exercise protocol, arguments, loss/retention and result ownership.
 They do not interpret native AppleScript in a real app or prove focus, geometry,
 restart/reopening or permissions on a user's desktop.
+
+### Proxy environment
+
+All host launch transactions forward `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
+`NO_PROXY` and their lowercase equivalents independently. Missing caller keys
+are omitted; empty values are forwarded unchanged. Existing host environment
+values are not cleared when the caller omits a key. Values travel in private
+0700 transaction directories and 0600 descriptors, never shell arguments.
+Launcher host diagnostics mask caller proxy values.
+
+Codex and Claude inherit these settings. Isolated OpenCode preserves only these
+eight inherited transport settings in addition to its isolated environment.
+Explicit `executors.<name>.env` settings take precedence. This forwarding does
+not decide which case an HTTP client prefers or how it interprets `NO_PROXY`,
+empty values, proxy authentication or bypass rules; those remain client behavior.
+Provider output is still archived verbatim: configured executors must not print
+credentials. Real provider network compatibility requires separate qualification.

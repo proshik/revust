@@ -2,6 +2,9 @@
 
 ## 0.1.2 — Unreleased
 
+- Forward caller proxy settings through host launch transactions and isolated
+  OpenCode executors, preserving case, empty values and explicit executor overrides.
+
 - OpenCode isolated sessions can load providers from a configured JSON/JSONC file
   (`executors.opencode.options.providers_file`), converting an opencode.jsonc
   document to native provider entries.

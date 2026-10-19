@@ -9,11 +9,10 @@ import subprocess
 import sys
 import tempfile
 import uuid
-from helper_common import safe
+from helper_common import FORWARDED, safe
 
 FINAL = {'exited', 'interrupted', 'failed_to_start'}
 STATES = FINAL | {'starting', 'running', 'cancelling'}
-FORWARDED = ('PATH', 'HOME', 'XDG_CONFIG_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'TMPDIR')
 
 
 class ProtocolError(Exception):
