@@ -151,6 +151,7 @@
     "crates/executors/src/lib.rs",
     "crates/executors/src/opencode.rs",
     "crates/executors/src/opencode/isolated.rs",
+    "crates/executors/src/opencode/providers.rs",
     "crates/executors/src/process.rs",
     "crates/executors/src/process/platform.rs",
     "crates/executors/src/rollout.rs",

@@ -137,6 +137,7 @@ pub(super) fn policy() -> Rule {
                     "opencode",
                     executor(object([
                         ("agent", Rule::Text),
+                        ("providers_file", Rule::Text),
                         ("session_mode", choice(&["isolated"])),
                     ])),
                 ),

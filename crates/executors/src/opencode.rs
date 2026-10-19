@@ -201,3 +201,6 @@ fn label(text: &str) -> String {
 
 #[cfg(unix)]
 pub mod isolated;
+
+#[cfg(unix)]
+pub mod providers;

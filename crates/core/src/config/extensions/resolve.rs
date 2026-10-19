@@ -45,7 +45,7 @@ impl EffectivePolicy {
             "completeness":{"required_reviewers":[],"min_successful_reviewers":0,
                 "require_synthesis_success":false,"require_all_verified":false,"synthesis_failure":"legacy"},
             "executors":{"claude":{"executable":"claude","env":{}},"codex":{"executable":"codex","env":{}},
-                "opencode":{"executable":"opencode","env":{},"options":{"session_mode":"isolated"}}},
+                "opencode":{"executable":"opencode","env":{},"options":{"session_mode":"isolated","providers_file":""}}},
             "presentation":{"host":"auto","mode":"auto","geometry":{},"unavailable":"error"},
             "output":{"tui":true,"format":"json"}
         }), &json!({"layer":"default","kind":"legacy"}));

@@ -103,7 +103,7 @@ impl Session {
             .ok_or_else(|| invalid("OpenCode options must be an object"))?;
         if options
             .keys()
-            .any(|k| !["agent", "session_mode"].contains(&k.as_str()))
+            .any(|k| !["agent", "providers_file", "session_mode"].contains(&k.as_str()))
             || options.get("agent").is_some_and(|v| v != "revust-review")
             || options.get("session_mode").is_some_and(|v| v != "isolated")
         {
@@ -112,7 +112,19 @@ impl Session {
             ));
         }
         let mut environment = BTreeMap::from([("PATH".into(), "/usr/bin:/bin".into())]);
+        // File providers form the base layer; env content overrides by ID.
         let mut providers = json!({});
+        if let Some(file) = options.get("providers_file") {
+            let text = file
+                .as_str()
+                .ok_or_else(|| invalid("OpenCode providers_file must be a string"))?;
+            if !text.is_empty() {
+                let path = opencode::providers::resolve_path(text)?;
+                let loaded = opencode::providers::load(&path)?;
+                opencode::providers::validate(&loaded)?;
+                providers = loaded;
+            }
+        }
         for (key, value) in &settings.environment {
             if key == "OPENCODE_CONFIG_CONTENT" {
                 let config: Value = serde_json::from_str(value)
@@ -125,33 +137,17 @@ impl Session {
                         "isolated OPENCODE_CONFIG_CONTENT accepts only providers",
                     ));
                 }
-                providers = config
+                let content = config
                     .get("providers")
                     .cloned()
                     .unwrap_or_else(|| json!({}));
-                let map = providers
-                    .as_object()
-                    .ok_or_else(|| invalid("OpenCode providers must be an object"))?;
-                for provider in map.values() {
-                    if !provider.is_object() {
-                        return Err(invalid("OpenCode provider must be an object"));
-                    }
-                    if let Some(package) = provider.get("package") {
-                        // Qualified native package: never install an npm or file provider.
-                        if package != "@opencode/ai/providers/openai-compatible" {
-                            return Err(invalid("unqualified OpenCode provider package"));
-                        }
-                    }
-                    if provider
-                        .get("models")
-                        .and_then(Value::as_object)
-                        .is_some_and(|models| {
-                            models.values().any(|model| model.get("package").is_some())
-                        })
-                    {
-                        return Err(invalid(
-                            "OpenCode model package overrides are not qualified",
-                        ));
+                opencode::providers::validate(&content)?;
+                if let Some(map) = content.as_object() {
+                    let merged = providers
+                        .as_object_mut()
+                        .ok_or_else(|| invalid("OpenCode providers must be an object"))?;
+                    for (id, provider) in map {
+                        merged.insert(id.clone(), provider.clone());
                     }
                 }
             } else if key == "HOME"

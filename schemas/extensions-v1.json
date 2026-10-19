@@ -178,6 +178,11 @@
                       "pattern": "^[^\\u0000]*$",
                       "type": "string"
                     },
+                    "providers_file": {
+                      "minLength": 1,
+                      "pattern": "^[^\\u0000]*$",
+                      "type": "string"
+                    },
                     "session_mode": {
                       "enum": [
                         "isolated"
@@ -818,6 +823,11 @@
                         "additionalProperties": false,
                         "properties": {
                           "agent": {
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000]*$",
+                            "type": "string"
+                          },
+                          "providers_file": {
                             "minLength": 1,
                             "pattern": "^[^\\u0000]*$",
                             "type": "string"
