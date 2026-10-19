@@ -60,7 +60,9 @@ opencode.jsonc document or a bare provider-ID map. opencode.jsonc entries
 convert as follows: npm "@ai-sdk/openai-compatible" becomes the native package
 "@opencode/ai/providers/openai-compatible" (any other npm name fails), options
 become settings on the provider and its models, and enabled_providers filters
-entries when present. Comments and trailing commas are accepted. A
+entries when present. Comments and trailing commas are accepted; an
+unterminated block comment fails. An empty providers_file value disables an
+inherited path. A
 {file:~/...} secret reference expands to an absolute path against the revust
 HOME, because the isolated child receives a fresh HOME; the value stays a
 file reference that OpenCode itself reads. File providers

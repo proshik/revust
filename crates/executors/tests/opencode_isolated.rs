@@ -372,11 +372,11 @@ fn providers_file_converts_opencode_jsonc_with_comments_and_trailing_commas() {
                 "npm": "@ai-sdk/openai-compatible",
                 "name": "GLM Ecom",
                 "options": {"baseURL": "https://llm.example.invalid/v1", "apiKey": "{file:~/.secrets/glm}"},
-                "models": {"glm-5.3-flash": {"options": {"maxTokens": 8}},},
+                "models": {"glm-5.3-flash": {"options": {"maxTokens": 8}}, /* tail */},
             },
-            "disabled": {"npm": "@ai-sdk/openai-compatible", "options": {}},
+            "disabled": {"npm": "@ai-sdk/openai-compatible", "options": {}}, // filtered
         },
-        "enabled_providers": ["ecom_glm",],
+        "enabled_providers": ["ecom_glm",], /* done */
     }"#,
     )
     .unwrap();
@@ -423,6 +423,11 @@ fn providers_file_refuses_missing_files_unknown_npm_and_unqualified_packages() {
             Some(r#"{"x":{"package":"some-npm-package"}}"#),
             "unqualified OpenCode provider package",
         ),
+        (
+            "unterminated comment",
+            Some(r#"{"x":{"package":"@opencode/ai/providers/openai-compatible"}} /* unfinished"#),
+            "block comment is not terminated",
+        ),
     ] {
         let tmp = Temp::new();
         let root = tmp.0.join("private");
@@ -442,6 +447,23 @@ fn providers_file_refuses_missing_files_unknown_npm_and_unqualified_packages() {
         assert!(error.contains(expected), "{name}: {error}");
         assert!(!root.exists(), "{name}");
     }
+}
+
+#[test]
+fn empty_providers_file_disables_loading_without_touching_the_filesystem() {
+    let tmp = Temp::new();
+    let capture = tmp.0.join("captured");
+    let bin = capture_script(&tmp.0, response());
+    let mut settings = settings(bin);
+    settings
+        .environment
+        .insert("REVUST_CAPTURE".into(), capture.to_str().unwrap().into());
+    let root = tmp.0.join("private");
+    let session = Session::prepare(&root, &settings, &json!({"providers_file": ""})).unwrap();
+    session
+        .run(request(&tmp.0), &control(), |_, _| Ok(()), |_| {})
+        .unwrap();
+    assert_eq!(captured_config(&capture)["providers"], json!({}));
 }
 
 #[test]

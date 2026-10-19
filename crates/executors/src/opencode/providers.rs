@@ -49,7 +49,9 @@ pub fn validate(providers: &Value) -> io::Result<()> {
 pub fn load(path: &Path) -> io::Result<Value> {
     let text = fs::read_to_string(path)
         .map_err(|error| invalid(&format!("providers file {}: {error}", path.display())))?;
-    let value: Value = serde_json::from_str(&strip_jsonc(&text)).map_err(|error| {
+    let stripped = strip_jsonc(&text)
+        .map_err(|message| invalid(&format!("providers file {}: {message}", path.display())))?;
+    let value: Value = serde_json::from_str(&stripped).map_err(|error| {
         invalid(&format!(
             "providers file {} is not valid JSON(C): {error}",
             path.display()
@@ -212,8 +214,17 @@ fn convert(provider: &Value, enabled: Option<&Value>) -> io::Result<Value> {
 }
 
 /// Strip // and /* */ comments and trailing commas outside string literals,
-/// keeping string contents byte-identical.
-fn strip_jsonc(text: &str) -> String {
+/// keeping string contents byte-identical. Comments are removed before
+/// trailing commas so `, /* note */ }` resolves; an unterminated block
+/// comment is an error rather than silent truncation.
+fn strip_jsonc(text: &str) -> Result<String, &'static str> {
+    // Comments go first so a trailing comma followed by a comment still
+    // resolves to a closing delimiter.
+    let comments = strip_comments(text)?;
+    Ok(strip_trailing_commas(&comments))
+}
+
+fn strip_comments(text: &str) -> Result<String, &'static str> {
     let mut output = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
     let mut in_string = false;
@@ -245,13 +256,46 @@ fn strip_jsonc(text: &str) -> String {
                 }
             }
             '/' if chars.peek() == Some(&'*') => {
-                output.push(' ');
-                while let Some(skipped) = chars.next() {
-                    if skipped == '*' && chars.peek() == Some(&'/') {
-                        chars.next();
-                        break;
+                loop {
+                    match chars.next() {
+                        Some('*') if chars.peek() == Some(&'/') => {
+                            chars.next();
+                            break;
+                        }
+                        Some(_) => (),
+                        None => return Err("block comment is not terminated"),
                     }
                 }
+                output.push(' ');
+            }
+            _ => output.push(char),
+        }
+    }
+    Ok(output)
+}
+
+fn strip_trailing_commas(text: &str) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut in_string = false;
+    while let Some(char) = chars.next() {
+        if in_string {
+            output.push(char);
+            match char {
+                '\\' => {
+                    if let Some(escaped) = chars.next() {
+                        output.push(escaped);
+                    }
+                }
+                '"' => in_string = false,
+                _ => (),
+            }
+            continue;
+        }
+        match char {
+            '"' => {
+                in_string = true;
+                output.push(char);
             }
             ',' if chars
                 .clone()
@@ -277,7 +321,7 @@ mod tests {
             "list": [1, 2, 3,],
             "nested": {"deep": {"value": "comma,in,string"},},
         }"#;
-        let value: Value = serde_json::from_str(&strip_jsonc(text)).unwrap();
+        let value: Value = serde_json::from_str(&strip_jsonc(text).unwrap()).unwrap();
         assert_eq!(value["url"], "https://example.invalid/v1//double");
         assert_eq!(value["key"], "a//b/*c*/d\"e");
         assert_eq!(value["list"], json!([1, 2, 3]));
@@ -285,12 +329,31 @@ mod tests {
     }
 
     #[test]
-    fn strip_jsonc_handles_escapes_and_unterminated_comments() {
+    fn strip_jsonc_resolves_trailing_commas_followed_by_comments() {
+        let text = r#"{"providers":{"p":{}, /* note */},"list":[1, // tail
+            ]}"#;
+        let value: Value = serde_json::from_str(&strip_jsonc(text).unwrap()).unwrap();
+        assert_eq!(value["providers"], json!({"p":{}}));
+        assert_eq!(value["list"], json!([1]));
+    }
+
+    #[test]
+    fn strip_jsonc_handles_escapes_and_rejects_unterminated_comments() {
         let value: Value =
-            serde_json::from_str(&strip_jsonc(r#"{"a": "back\\\"slash", "b": 1,}"#)).unwrap();
+            serde_json::from_str(&strip_jsonc(r#"{"a": "back\\\"slash", "b": 1,}"#).unwrap())
+                .unwrap();
         assert_eq!(value["a"], "back\\\"slash");
         assert_eq!(value["b"], 1);
-        assert!(serde_json::from_str::<Value>(&strip_jsonc("{\"a\": 1 /* unterminated")).is_err());
+        // A complete object followed by an unterminated comment must fail
+        // instead of silently loading the prefix.
+        assert_eq!(
+            strip_jsonc("{\"providers\":{\"p\":{}}} /* unfinished"),
+            Err("block comment is not terminated")
+        );
+        assert_eq!(
+            strip_jsonc("{\"a\": 1 /* unfinished"),
+            Err("block comment is not terminated")
+        );
     }
 
     #[test]
