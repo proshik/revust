@@ -40,13 +40,20 @@ real built archives before upload.
 through fake Guild and shared host transactions with synthetic Claude, Codex
 and OpenCode executors. Hosts strip proxy inheritance. It covers missing, empty
 and distinct case values and checks output/archive secrecy without model calls.
+It also simulates native observer timeout, code 3 and interruption to verify
+workspace/evidence retention and server teardown, without calling real Guild.
+Both CI and release-candidate run this suite after the all-target build.
 
 Parent-only native acceptance (not part of the normal suite):
 `REVUST_TEST_BINARY=/absolute/path/to/built/revust python3 -B tests/compat/proxy_forwarding_checks.py --native-guild`.
 Requires the owning Guild session, terminal-job/archive-viewer support, Python
 and loopback sockets. It uses the production launcher, a synthetic provider,
 a temporary task/archive and owned HTTP origin/proxy servers, with a 45-second
-launcher bound. Output contains only pass flags; it never invokes a provider
+launcher bound. Successful output contains only pass flags; it never invokes a provider
 installation or models. It qualifies this fixture's Python HTTP client only.
-On a native timeout, inspect existing Guild Terminal Jobs before retrying;
-ending the observer does not cancel a possibly running host-owned job.
+On timeout, interruption or any unsuccessful/unconfirmed result, the fixture
+retains its private workspace, provider, task/archive and sanitized diagnostic
+files. It prints a safe retained path and inspection instruction. Inspect
+existing Guild Terminal Jobs and those artifacts before retrying; ending the
+observer does not cancel a possibly running host-owned job. Only confirmed
+success cleans the fixture workspace. Owned loopback servers always shut down.

@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Model-free real-revust launch chains; native Guild is an explicit opt-in."""
+import contextlib
+import io
 import http.client
 import http.server
 import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 BINARY = Path(os.environ.get('REVUST_TEST_BINARY', ROOT / 'target/debug/revust')).resolve()
@@ -95,6 +99,70 @@ class RealChain(unittest.TestCase):
                                 self.assertNotIn(value.encode(), public, 'proxy leaked into public output/archive')
 
 
+class NativeOwnership(unittest.TestCase):
+    def test_ambiguous_observation_retains_owned_inputs_and_evidence(self):
+        for outcome in ('timeout', 'code-3', 'interrupted'):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory(prefix='revust-retention-test-') as directory:
+                parent = Path(directory)
+                roots = []
+                endpoints = []
+                servers = []
+                class Server:
+                    def __init__(self, *_):
+                        self.server_port = 12345
+                        self.stopped = self.closed = False
+                        servers.append(self)
+                    def serve_forever(self):
+                        pass
+                    def shutdown(self):
+                        self.stopped = True
+                    def server_close(self):
+                        self.closed = True
+                def launch(argv, **kwargs):
+                    root = kwargs['cwd']
+                    roots.append(root)
+                    endpoint = kwargs['env']['http_proxy']
+                    endpoints.append(endpoint.encode())
+                    (root / 'tasks/proxy/01/owned-evidence').write_text('synthetic job evidence')
+                    if outcome == 'timeout':
+                        raise subprocess.TimeoutExpired(argv, 45, output=endpoint.encode(), stderr=endpoint.encode())
+                    if outcome == 'interrupted':
+                        raise KeyboardInterrupt
+                    return subprocess.CompletedProcess(argv, 3, endpoint.encode(), endpoint.encode())
+                original_mkdtemp = tempfile.mkdtemp
+                def allocate(**kwargs):
+                    return original_mkdtemp(dir=parent, **kwargs)
+                public = io.StringIO()
+                with mock.patch.dict(os.environ, {'GUILD_SESSION': 'synthetic', 'GUILD_SOCKET': 'synthetic', 'TMPDIR': str(parent)}), \
+                     mock.patch.object(tempfile, 'mkdtemp', side_effect=allocate), \
+                     mock.patch.object(http.server, 'ThreadingHTTPServer', Server), \
+                     mock.patch.object(subprocess, 'run', side_effect=launch), \
+                     contextlib.redirect_stdout(public), contextlib.redirect_stderr(public):
+                    with self.assertRaises((SystemExit, KeyboardInterrupt)):
+                        native()
+                self.assertEqual(len(roots), 1, 'must never restart an ambiguous job')
+                root = roots[0]
+                self.assertTrue(root.is_dir(), 'ambiguous observer must retain the job workspace')
+                self.assertTrue((root / 'provider').is_file())
+                self.assertTrue((root / 'expected.json').is_file())
+                self.assertTrue((root / 'tasks/proxy/01/input/scope.md').is_file())
+                self.assertEqual((root / 'tasks/proxy/01/owned-evidence').read_text(), 'synthetic job evidence')
+                for name in ('observation.json', 'stdout.log', 'stderr.log'):
+                    path = root / name
+                    self.assertTrue(path.is_file())
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                    self.assertNotIn(endpoints[0], path.read_bytes())
+                self.assertEqual(root.stat().st_mode & 0o777, 0o700)
+                self.assertIn(str(root), public.getvalue())
+                self.assertIn('inspect', public.getvalue().lower())
+                self.assertNotIn(endpoints[0].decode(), public.getvalue())
+                self.assertEqual(len(servers), 2)
+                self.assertTrue(all(server.stopped and server.closed for server in servers))
+                observation = json.loads((root / 'observation.json').read_text())
+                expected = {'timeout': 'timeout', 'code-3': 'launcher-exit-3', 'interrupted': 'interrupted'}
+                self.assertEqual(observation['observation'], expected[outcome])
+
+
 def native():
     """Parent-owned, one synthetic provider, temporary archive, loopback only."""
     if not all(os.environ.get(k) for k in ('GUILD_SOCKET', 'GUILD_SESSION')):
@@ -128,23 +196,53 @@ def native():
     for thread in threads:
         thread.start()
     try:
-        with tempfile.TemporaryDirectory(prefix='revust-native-proxy-') as directory:
-            root = Path(directory)
-            endpoint = 'http://127.0.0.1:' + str(proxy.server_port)
-            # Set every key so allowed host-global values cannot affect this fixture.
-            values = {key: '' if key.lower() == 'no_proxy' else endpoint for key in KEYS}
+        root = Path(tempfile.mkdtemp(prefix='revust-native-proxy-'))
+        passed = False
+        observation = 'preparing'
+        stdout = stderr = b''
+        endpoint = 'http://127.0.0.1:' + str(proxy.server_port)
+        # Set every key so allowed host-global values cannot affect this fixture.
+        values = {key: '' if key.lower() == 'no_proxy' else endpoint for key in KEYS}
+        try:
             args = prepare(root, 'claude', values, 'http://synthetic.invalid/')
             environment = {k: v for k, v in os.environ.items() if k not in KEYS}
             environment.update(values, REVUST_BIN=str(BINARY), REVUST_HOST='guild', HOME=str(root))
             try:
                 result = subprocess.run(['/bin/bash', str(ROOT / 'scripts/launch-revust.sh'), *args],
                                         cwd=root, env=environment, capture_output=True, timeout=45)
+                stdout, stderr = result.stdout, result.stderr
+                observation = 'launcher-exit-' + str(result.returncode)
                 passed = result.returncode == 0 and all(flags.values()) and (root / 'provider-pass.json').is_file()
-            except subprocess.TimeoutExpired:
-                passed = False
+            except subprocess.TimeoutExpired as error:
+                observation = 'timeout'
+                stdout, stderr = error.stdout or b'', error.stderr or b''
+            except KeyboardInterrupt:
+                observation = 'interrupted'
+                raise
+            except OSError:
+                observation = 'launch-error'
             print(json.dumps({'native_chain': passed, **flags}))
             if not passed:
                 raise SystemExit(1)
+        finally:
+            if passed:
+                shutil.rmtree(root)
+            else:
+                def save(name, data):
+                    if isinstance(data, str):
+                        data = data.encode()
+                    for value in sorted({v for v in values.values() if v}, key=len, reverse=True):
+                        data = data.replace(value.encode(), b'[proxy value]')
+                    descriptor = os.open(root / name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                    with os.fdopen(descriptor, 'wb') as output:
+                        output.write(data)
+                save('stdout.log', stdout)
+                save('stderr.log', stderr)
+                save('observation.json', json.dumps({'observation': observation, 'native_chain': False, **flags}))
+                print('Fixture retained at ' + json.dumps(str(root)) +
+                      '; inspect Guild Terminal Jobs and these artifacts before retrying. '
+                      'Do not restart or cancel an unconfirmed job.', file=sys.stderr)
+
     finally:
         for server in servers:
             server.shutdown()

@@ -57,14 +57,7 @@ def run(mode):
         assert select.select([process.stdout],[],[],5)[0],"missing restoration marker"
         marker=process.stdout.readline()
         assert marker==b"RESTORED\n",marker
-        # macOS can briefly report PENDIN while the child enters its canonical
-        # acknowledgement read. Require exact restoration within a bounded wait.
-        deadline=time.monotonic()+1
-        after=termios.tcgetattr(slave)
-        while after!=before and time.monotonic()<deadline:
-            time.sleep(.01)
-            after=termios.tcgetattr(slave)
-        assert after==before,(mode,"termios not restored",before,after)
+        assert termios.tcgetattr(slave)==before,(mode,"termios not restored", before, termios.tcgetattr(slave))
         os.write(master,b"ack\n")
         until(b"ack\r\n")  # do not match "backtrace" in panic diagnostics
         stdout,_=process.communicate(timeout=10)
