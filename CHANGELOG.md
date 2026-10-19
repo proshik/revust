@@ -2,6 +2,9 @@
 
 ## 0.1.1 — Unreleased
 
+- OpenCode isolated sessions can load providers from a configured JSON/JSONC file
+  (`executors.opencode.options.providers_file`), converting an opencode.jsonc
+  document to native provider entries.
 - Update serde_json to 1.0.154, sha2 to 0.11.1, and serde-saphyr/granit-parser to 2.0.0.
 - Validate full source history and distribution archives during CI and packaging.
 
