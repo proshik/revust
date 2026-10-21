@@ -16,6 +16,17 @@ builds, tests or formatters, install anything, delegate, publish or fix code.
 Existing validation artifacts can support a conclusion only when they actually
 cover the candidate. Never claim that an unperformed check passed.
 
+Check the causal contract, not merely agreement with a preferred pattern. For
+relevant candidates, inspect actual database driver isolation and implicit
+transaction behavior, broker confirms versus enqueue, delivery uncertainty,
+consumer effects versus ack/offset and ordering guarantees. Account for existing
+idempotency and recovery mechanisms. A database commit and publication can
+diverge in either direction; an outbox does not alone prove exactly-once effects.
+Check compatibility across participating callers and versions, migration history,
+existing data and rolling upgrade/rollback before treating a local omission as a
+supported-path failure. Use available artifacts; name unresolved guarantees
+rather than assuming them or requesting forbidden execution.
+
 Return one verdict for each supplied id, copied exactly, and no additional IDs.
 Choose confirmed when the claimed failure follows from the evidence; refined
 when a real defect needs corrected details; rejected when evidence disproves the

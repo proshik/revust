@@ -33,6 +33,20 @@ frontmatter (description, model, agents, stages) and a Markdown body. Lenses liv
 under lenses/; stage documents are prompts/synthesis.md and prompts/verify.md.
 User-authored raw winning bytes are retained independently of normalized bodies.
 
+Built-in profile bodies supply shared investigation and causal-evidence guidance;
+assigned lenses provide complementary directions, applied only where relevant.
+These directions do not require a particular library or pattern, and composition
+checks do not establish the quality of findings produced by a model.
+
+A winning user/project profile replaces the entire built-in profile, including
+its body and roster: updated built-in body guidance is not merged into a custom
+profile. Its assigned lens IDs still resolve through the shared lens layers, so
+an unchanged custom roster can receive updated embedded lenses unless those lens
+files are also overridden. A custom stage document similarly shadows the built-in
+stage guidance. Inspect the winning documents and rendered dry-run prompts when
+checking which guidance applies; preserve intentional customizations rather than
+copying defaults over them. See [CLI workflows](usage.md) for dry-run inspection.
+
 ```yaml
 ---
 description: Example caller profile
