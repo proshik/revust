@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — 2026-10-24
+
+- Expand conditional review directions for transaction and messaging guarantees,
+  compatibility, recovery, resource limits, documentation and regression coverage.
+- Require causal contract evidence in built-in profile bodies and verification;
+  document whole-document override limits for customized profiles and lenses.
+
 ## 0.1.3 — 2026-10-19
 
 - Forward caller proxy settings through host launch transactions and isolated
