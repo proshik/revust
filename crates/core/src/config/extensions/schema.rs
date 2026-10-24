@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 pub(super) enum Rule {
     Bool,
     Text,
+    /// Text that may be empty; an empty value disables the setting.
+    Path,
     EnvValue,
     Uint(u64, u64),
     Number(f64),
@@ -137,6 +139,7 @@ pub(super) fn policy() -> Rule {
                     "opencode",
                     executor(object([
                         ("agent", Rule::Text),
+                        ("providers_file", Rule::Path),
                         ("session_mode", choice(&["isolated"])),
                     ])),
                 ),
@@ -205,6 +208,7 @@ impl Rule {
             {
                 Ok(())
             }
+            Self::Path if value.as_str().is_some_and(|s| !s.contains('\0')) => Ok(()),
             Self::Uint(min, max) if value.as_u64().is_some_and(|v| v >= *min && v <= *max) => {
                 Ok(())
             }
@@ -263,6 +267,7 @@ impl Rule {
             Self::EnvValue => json!({"type":"string","pattern":"^[^\\u0000]*$"}),
             Self::Bool => json!({"type":"boolean"}),
             Self::Text => json!({"type":"string","minLength":1,"pattern":"^[^\\u0000]*$"}),
+            Self::Path => json!({"type":"string","pattern":"^[^\\u0000]*$"}),
             Self::Uint(min, max) => json!({"type":"integer","minimum":min,"maximum":max}),
             Self::Number(min) => json!({"type":"number","minimum":min}),
             Self::Choice(choices) => json!({"type":"string","enum":choices}),

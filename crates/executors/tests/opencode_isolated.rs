@@ -82,6 +82,18 @@ fn script(root: &std::path::Path, body: &str) -> String {
     fs::set_permissions(&p, fs::Permissions::from_mode(0o700)).unwrap();
     p.to_str().unwrap().into()
 }
+fn capture_script(root: &std::path::Path, body: &str) -> String {
+    script(
+        root,
+        &format!("printf '%s' \"$OPENCODE_CONFIG_CONTENT\" > \"$REVUST_CAPTURE\"; {body}"),
+    )
+}
+fn response() -> &'static str {
+    "printf '%s\\n' '{\"type\":\"text\",\"part\":{\"messageID\":\"m\",\"text\":\"{\\\"findings\\\":[]}\"}}'"
+}
+fn captured_config(capture: &std::path::Path) -> serde_json::Value {
+    serde_json::from_str(&fs::read_to_string(capture).unwrap()).unwrap()
+}
 #[test]
 fn isolated_transport_preserves_input_raw_output_and_private_child_config() {
     let tmp = Temp::new();
@@ -291,6 +303,170 @@ fn unsupported_or_failed_version_probes_refuse_dispatch_and_clean_private_state(
 }
 
 #[test]
+fn providers_file_supplies_native_providers_and_env_overrides_by_key() {
+    for (name, document) in [
+        (
+            "wrapper",
+            json!({"providers":{
+                "file-only":{"package":"@opencode/ai/providers/openai-compatible","name":"from file","models":{"m":{}}},
+                "shared":{"package":"@opencode/ai/providers/openai-compatible","name":"from file"}}}),
+        ),
+        (
+            "bare",
+            json!({
+                "file-only":{"package":"@opencode/ai/providers/openai-compatible","name":"from file","models":{"m":{}}},
+                "shared":{"package":"@opencode/ai/providers/openai-compatible","name":"from file"}}),
+        ),
+    ] {
+        let tmp = Temp::new();
+        let capture = tmp.0.join("captured");
+        let bin = capture_script(&tmp.0, response());
+        let file = tmp.0.join(format!("providers-{name}.json"));
+        fs::write(&file, document.to_string()).unwrap();
+        let mut settings = settings(bin);
+        settings
+            .environment
+            .insert("REVUST_CAPTURE".into(), capture.to_str().unwrap().into());
+        settings.environment.insert(
+            "OPENCODE_CONFIG_CONTENT".into(),
+            json!({"providers":{"shared":{"name":"from env"}}}).to_string(),
+        );
+        let root = tmp.0.join("private");
+        let session = Session::prepare(
+            &root,
+            &settings,
+            &json!({"session_mode":"isolated","providers_file": file.to_str().unwrap()}),
+        )
+        .unwrap_or_else(|error| panic!("{name}: {error}"));
+        let result = session
+            .run(request(&tmp.0), &control(), |_, _| Ok(()), |_| {})
+            .unwrap();
+        assert!(result.process.status.unwrap().success(), "{name}");
+        let config = captured_config(&capture);
+        assert_eq!(
+            config["providers"]["file-only"],
+            json!({"package":"@opencode/ai/providers/openai-compatible","name":"from file","models":{"m":{}}}),
+            "{name}"
+        );
+        // Env content overrides a file provider by its whole entry.
+        assert_eq!(
+            config["providers"]["shared"],
+            json!({"name":"from env"}),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn providers_file_converts_opencode_jsonc_with_comments_and_trailing_commas() {
+    let tmp = Temp::new();
+    let capture = tmp.0.join("captured");
+    let bin = capture_script(&tmp.0, response());
+    let file = tmp.0.join("opencode.jsonc");
+    fs::write(
+        &file,
+        r#"{
+        // user opencode.jsonc; comment markers "inside" strings must survive
+        "provider": {
+            "ecom_glm": { /* native mapping of @ai-sdk/openai-compatible */
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "GLM Ecom",
+                "options": {"baseURL": "https://llm.example.invalid/v1", "apiKey": "{file:~/.secrets/glm}"},
+                "models": {"glm-5.3-flash": {"options": {"maxTokens": 8}}, /* tail */},
+            },
+            "disabled": {"npm": "@ai-sdk/openai-compatible", "options": {}}, // filtered
+        },
+        "enabled_providers": ["ecom_glm",], /* done */
+    }"#,
+    )
+    .unwrap();
+    let mut settings = settings(bin);
+    settings
+        .environment
+        .insert("REVUST_CAPTURE".into(), capture.to_str().unwrap().into());
+    let root = tmp.0.join("private");
+    let session = Session::prepare(
+        &root,
+        &settings,
+        &json!({"providers_file": file.to_str().unwrap()}),
+    )
+    .unwrap();
+    let result = session
+        .run(request(&tmp.0), &control(), |_, _| Ok(()), |_| {})
+        .unwrap();
+    assert!(result.process.status.unwrap().success());
+    let config = captured_config(&capture);
+    let home = std::env::var("HOME").unwrap_or_default();
+    assert_eq!(
+        config["providers"]["ecom_glm"],
+        json!({
+            "name":"GLM Ecom",
+            "package":"@opencode/ai/providers/openai-compatible",
+            "settings":{"baseURL":"https://llm.example.invalid/v1","apiKey":format!("{{file:{home}/.secrets/glm}}")},
+            "models":{"glm-5.3-flash":{"settings":{"maxTokens":8}}}
+        })
+    );
+    assert!(config["providers"].get("disabled").is_none());
+}
+
+#[test]
+fn providers_file_refuses_missing_files_unknown_npm_and_unqualified_packages() {
+    for (name, file, expected) in [
+        ("missing", None, "providers file"),
+        (
+            "unknown npm",
+            Some(r#"{"provider":{"x":{"npm":"@ai-sdk/anthropic","options":{}}}}"#),
+            "@ai-sdk/anthropic",
+        ),
+        (
+            "unqualified package",
+            Some(r#"{"x":{"package":"some-npm-package"}}"#),
+            "unqualified OpenCode provider package",
+        ),
+        (
+            "unterminated comment",
+            Some(r#"{"x":{"package":"@opencode/ai/providers/openai-compatible"}} /* unfinished"#),
+            "block comment is not terminated",
+        ),
+    ] {
+        let tmp = Temp::new();
+        let root = tmp.0.join("private");
+        let path = match file {
+            Some(content) => {
+                let path = tmp.0.join("providers-file");
+                fs::write(&path, content).unwrap();
+                path
+            }
+            None => tmp.0.join("missing.json"),
+        };
+        let options = json!({"providers_file": path.to_str().unwrap()});
+        let error = Session::prepare(&root, &settings("/bin/sh".into()), &options)
+            .err()
+            .unwrap_or_else(|| panic!("{name}: must fail"))
+            .to_string();
+        assert!(error.contains(expected), "{name}: {error}");
+        assert!(!root.exists(), "{name}");
+    }
+}
+
+#[test]
+fn empty_providers_file_disables_loading_without_touching_the_filesystem() {
+    let tmp = Temp::new();
+    let capture = tmp.0.join("captured");
+    let bin = capture_script(&tmp.0, response());
+    let mut settings = settings(bin);
+    settings
+        .environment
+        .insert("REVUST_CAPTURE".into(), capture.to_str().unwrap().into());
+    let root = tmp.0.join("private");
+    let session = Session::prepare(&root, &settings, &json!({"providers_file": ""})).unwrap();
+    session
+        .run(request(&tmp.0), &control(), |_, _| Ok(()), |_| {})
+        .unwrap();
+    assert_eq!(captured_config(&capture)["providers"], json!({}));
+}
+
+#[test]
 fn temporary_attempts_have_distinct_owned_homes_removed_on_drop() {
     let temp = Temp::new();
     let capture = temp.0.join("home");
@@ -321,4 +497,82 @@ fn temporary_attempts_have_distinct_owned_homes_removed_on_drop() {
     assert!(second_home.is_dir());
     drop(second);
     assert!(!second_home.parent().unwrap().exists());
+}
+
+#[test]
+fn inherited_proxies_survive_isolation_and_explicit_values_win() {
+    const KEYS: [&str; 8] = [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+    ];
+    if std::env::var("REVUST_PROXY_PROBE").as_deref() != Ok("1") {
+        for mixed in [false, true] {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    "inherited_proxies_survive_isolation_and_explicit_values_win",
+                ])
+                .env("REVUST_PROXY_PROBE", "1");
+            for (index, key) in KEYS.iter().enumerate() {
+                child.env_remove(key);
+                if !mixed || index % 3 != 0 {
+                    child.env(
+                        key,
+                        if mixed {
+                            String::new()
+                        } else {
+                            format!("synthetic-{index}")
+                        },
+                    );
+                }
+            }
+            assert!(
+                child.output().unwrap().status.success(),
+                "isolated proxy preservation failed"
+            );
+        }
+        return;
+    }
+    let tmp = Temp::new();
+    for explicit in [false, true] {
+        let mut body = String::new();
+        for (index, key) in KEYS.iter().enumerate() {
+            let expected = if explicit && index == 0 {
+                Some("override".into())
+            } else {
+                std::env::var(key).ok()
+            };
+            body.push_str(&match expected {
+                Some(value) => format!("test \"${{{key}-missing}}\" = '{value}' || exit 9;\n"),
+                None => format!("test \"${{{key}+present}}\" = '' || exit 9;\n"),
+            });
+        }
+        body.push_str(response());
+        let mut configured = settings(script(&tmp.0, &body));
+        if explicit {
+            configured
+                .environment
+                .insert("HTTP_PROXY".into(), "override".into());
+        }
+        let session = Session::prepare(
+            &tmp.0.join(if explicit { "explicit" } else { "inherited" }),
+            &configured,
+            &json!({}),
+        )
+        .unwrap();
+        let execution = session
+            .run(request(&tmp.0), &control(), |_, _| Ok(()), |_| {})
+            .unwrap();
+        assert!(
+            execution.process.status.unwrap().success(),
+            "proxy environment mismatch"
+        );
+    }
 }

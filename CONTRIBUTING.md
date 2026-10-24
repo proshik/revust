@@ -12,6 +12,7 @@ cargo fmt --all -- --check
 cargo test --workspace --offline --locked -- --test-threads=1
 cargo clippy --workspace --all-targets --offline --locked -- -D warnings
 cargo build --workspace --all-targets --offline --locked
+python3 -B tests/compat/proxy_forwarding_checks.py
 python3 -B tests/compat/helper_observation_checks.py
 python3 -B tests/compat/host_launcher_checks.py
 python3 -B tests/compat/public_tui_checks.py

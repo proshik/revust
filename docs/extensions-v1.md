@@ -50,5 +50,29 @@ legacy, fail or passthrough; passthrough retains original candidates marked part
 Executor paths are literal executable identities, not shell programs. Environment
 overrides are child-only. Parsing presentation policy does not qualify a native
 host. Validate actual provider support separately; see [protocols](executor-protocols.md).
+
+OpenCode isolated sessions accept options.agent, options.session_mode and
+options.providers_file: a path to a JSON or JSONC file with provider
+definitions, so models from a user opencode.jsonc run without hand-written
+env JSON. A leading ~ expands to HOME; relative paths resolve from the revust
+working directory. The file may hold a {"providers":{...}} wrapper, an
+opencode.jsonc document or a bare provider-ID map. opencode.jsonc entries
+convert as follows: npm "@ai-sdk/openai-compatible" becomes the native package
+"@opencode/ai/providers/openai-compatible" (any other npm name fails), options
+become settings on the provider and its models, and enabled_providers filters
+entries when present. Comments and trailing commas are accepted; an
+unterminated block comment fails. An empty providers_file value disables an
+inherited path. A
+{file:~/...} secret reference expands to an absolute path against the revust
+HOME, because the isolated child receives a fresh HOME; the value stays a
+file reference that OpenCode itself reads. File providers
+follow the same qualification rules as env providers and form the base layer;
+OPENCODE_CONFIG_CONTENT providers override file entries by ID.
+
+```json
+{"version":1,"policy":{"executors":{"opencode":{
+ "options":{"providers_file":"~/.config/opencode/opencode.jsonc"}}}}}
+```
+
 Configuration edit API validates the entire proposed file and compares inode/bytes
 before atomic replacement, preserving concurrent authored changes.

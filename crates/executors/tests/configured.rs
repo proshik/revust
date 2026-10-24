@@ -178,3 +178,88 @@ fn explicit_child_values_win_after_inherited_filtering_without_parent_mutation()
         assert_eq!(output, b"valid");
     }
 }
+
+#[test]
+fn inherited_proxy_values_and_explicit_overrides_reach_codex_and_claude() {
+    const KEYS: [&str; 8] = [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+    ];
+    if std::env::var("REVUST_PROXY_PROBE").as_deref() != Ok("1") {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+        child
+            .args([
+                "--exact",
+                "inherited_proxy_values_and_explicit_overrides_reach_codex_and_claude",
+            ])
+            .env("REVUST_PROXY_PROBE", "1");
+        for (index, key) in KEYS.iter().enumerate() {
+            child.env(
+                key,
+                if index == 0 {
+                    String::new()
+                } else {
+                    format!("synthetic-{index}")
+                },
+            );
+        }
+        assert!(
+            child.output().unwrap().status.success(),
+            "inherited proxy policy failed"
+        );
+        return;
+    }
+    let p = policy(
+        json!({"executors":{"claude":{"executable":"/bin/sh"},"codex":{"executable":"/bin/sh"}}}),
+        vec![],
+    );
+    for executor in ["codex", "claude"] {
+        for explicit in [false, true] {
+            let mut settings = Settings::resolve(&p, Stage::Find, executor).unwrap();
+            if explicit {
+                settings
+                    .environment
+                    .insert("HTTP_PROXY".into(), "override".into());
+            }
+            let mut body = String::new();
+            for (index, key) in KEYS.iter().enumerate() {
+                let expected = if explicit && index == 0 {
+                    "override".into()
+                } else {
+                    std::env::var(key).unwrap()
+                };
+                body.push_str(&format!(
+                    "test \"${{{key}-missing}}\" = '{expected}' || exit 9;\n"
+                ));
+            }
+            let control = RunControl::new(
+                Limits::from_policy(&p).unwrap(),
+                Arc::new(MonotonicClock::default()),
+            )
+            .unwrap();
+            let result = settings
+                .run(
+                    Request {
+                        program: "unused".into(),
+                        argv: vec!["-c".into(), body],
+                        stdin: String::new(),
+                        cwd: std::env::temp_dir(),
+                    },
+                    &control,
+                    |_, _| Ok(true),
+                )
+                .unwrap();
+            assert!(
+                result.status.unwrap().success(),
+                "proxy child policy mismatch"
+            );
+            assert_eq!(std::env::var("HTTP_PROXY").unwrap(), "");
+        }
+    }
+}

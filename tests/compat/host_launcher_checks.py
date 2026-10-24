@@ -34,7 +34,11 @@ class HostContract(unittest.TestCase):
             environment.update(AGTERM_SESSION_ID='owned-session', AGTERM_SOCKET=str(root / 'socket'),
                                AGTERM_WINDOW_ID='owned-window')
         environment.update(controls or {})
-        argv = ['--task', 'synthetic task', '--run', 'quote\'"$`\n$(touch escaped)', *extra]
+        if case and case.get('real_binary'):
+            from proxy_forwarding_checks import KEYS, prepare
+            argv = prepare(root, case['executor'], {k: v for k, v in (controls or {}).items() if k in KEYS})
+        else:
+            argv = ['--task', 'synthetic task', '--run', 'quote\'"$`\n$(touch escaped)', *extra]
         result = subprocess.run(['/bin/bash', str(ENTRY), *argv], cwd=root, env=environment,
                                 capture_output=True, timeout=15)
         self.assertFalse((root / 'escaped').exists())
@@ -63,6 +67,34 @@ class HostContract(unittest.TestCase):
                 self.assertEqual(descriptor['args'][3], descriptor['archive_viewer']['program'])
                 self.assertEqual(len(self.trace(root, 'close')), 1)
                 self.assertEqual(list((root / 'tmp').glob('revust-*')), [])
+
+    def test_proxy_descriptor_transport(self):
+        keys = ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
+                'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy')
+        for host in ('guild', 'agterm'):
+            for values in ({}, {key: 'synthetic-private-' + key for key in keys},
+                           {'HTTP_PROXY': '', 'http_proxy': 'synthetic-lower', 'NO_PROXY': ''}):
+                with self.subTest(host=host, keys=list(values)):
+                    result, root, _ = self.invoke(host=host, controls=values)
+                    self.assertEqual(result.returncode, 0)
+                    observed = json.loads((root / 'proxy-observed.json').read_text())
+                    self.assertEqual(observed, values)
+                    permissions = json.loads((root / 'proxy-permissions.json').read_text())
+                    self.assertEqual(permissions, [0o700, 0o600])
+                    for value in values.values():
+                        if value:
+                            self.assertNotIn(value.encode(), result.stdout + result.stderr)
+
+    def test_proxy_values_are_masked_in_host_diagnostics(self):
+        value = 'synthetic-private-user:password@proxy'
+        result, root, _ = self.invoke({'host_error': True}, host='agterm',
+                                   controls={'https_proxy': value})
+        self.assertEqual(result.returncode, 3)
+        self.assertNotIn(value.encode(), result.stdout + result.stderr)
+        self.assertIn(b'[proxy value]', result.stderr)
+        diagnostics = list((root / 'tmp').glob('revust-launch-*/host-reply.json'))
+        self.assertEqual(len(diagnostics), 1)
+        self.assertNotIn(value.encode(), diagnostics[0].read_bytes())
 
     def test_capability_refusal_precedes_config_and_dispatch(self):
         for case in [

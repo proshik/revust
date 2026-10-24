@@ -158,3 +158,36 @@ fn runtime_admission_uses_resolved_limits_and_preserves_legacy_unlimited_paralle
     assert_eq!(limits.max_parallel, usize::MAX);
     assert_eq!(limits.stage_parallel, [usize::MAX, 1, 2]);
 }
+
+#[test]
+fn empty_providers_file_disables_an_inherited_path_from_an_earlier_layer() {
+    let tree = setup();
+    let invocation = Invocation {
+        config_dir: Some(tree.0.join("user")),
+        ..Invocation::default()
+    };
+    let runtime = RuntimeConfig::resolve(&tree.0, None, &invocation).unwrap();
+    let resolve = |layers: &[Layer]| {
+        EffectivePolicy::resolve(&runtime, layers, "comprehensive", &json!({}))
+            .unwrap()
+            .inspection()["values"]["executors"]["opencode"]["options"]["providers_file"]
+            .clone()
+    };
+    let user = || {
+        layer(
+            &tree,
+            LayerKind::User,
+            json!({"version":1,"policy":{"executors":{"opencode":{
+            "options":{"providers_file":"~/.config/opencode/opencode.jsonc"}}}}}),
+        )
+    };
+    assert_eq!(resolve(&[user()]), "~/.config/opencode/opencode.jsonc");
+    // A project layer disables the inherited path with an explicit empty value.
+    let project = layer(
+        &tree,
+        LayerKind::Project,
+        json!({"version":1,"policy":{"executors":{"opencode":{
+        "options":{"providers_file":""}}}}}),
+    );
+    assert_eq!(resolve(&[user(), project]), "");
+}

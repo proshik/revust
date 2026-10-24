@@ -13,10 +13,9 @@ import sys
 import tempfile
 import time
 import uuid
-from helper_common import HelperError, executable, safe
+from helper_common import FORWARDED, HelperError, executable, mask_proxy_values, safe
 
 HERE = Path(__file__).resolve().parent
-FORWARDED = ('PATH', 'HOME', 'XDG_CONFIG_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'TMPDIR')
 
 
 class LaunchError(Exception):
@@ -77,14 +76,15 @@ class Transaction:
             self.sent = False
             raise
         # Host acknowledgements and diagnostics remain distinct from review stdout.
-        # Only a bounded inert diagnostic is echoed; raw evidence stays private.
+        # Mask proxy values before truncation, including retained diagnostics.
         self.write('host-reply.json', json.dumps({'status': result.returncode,
-                   'stdout': result.stdout[:65536], 'stderr': result.stderr[:65536],
+                   'stdout': mask_proxy_values(result.stdout)[:65536],
+                   'stderr': mask_proxy_values(result.stderr)[:65536],
                    'stdout_truncated': len(result.stdout) > 65536,
                    'stderr_truncated': len(result.stderr) > 65536}))
         if result.returncode and not self.record('started.json') and not self.record('result.json'):
             if result.stderr:
-                print('host diagnostic: ' + safe(result.stderr[:65536]), file=sys.stderr)
+                print('host diagnostic: ' + safe(result.stderr)[:65536], file=sys.stderr)
             raise LaunchError('host launch was not acknowledged; no repeat dispatch')
         return result.stdout.strip() if result.returncode == 0 else ''
 

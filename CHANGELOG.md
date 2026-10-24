@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.1.1 — Unreleased
+## 0.1.3 — 2026-10-19
+
+- Forward caller proxy settings through host launch transactions and isolated
+  OpenCode executors, preserving case, empty values and explicit executor overrides.
+
+## 0.1.2 — 2026-10-19
+
+- OpenCode isolated sessions can load providers from a configured JSON/JSONC file
+  (`executors.opencode.options.providers_file`), converting an opencode.jsonc
+  document to native provider entries.
+
+## 0.1.1 — 2026-10-17
 
 - Update serde_json to 1.0.154, sha2 to 0.11.1, and serde-saphyr/granit-parser to 2.0.0.
 - Validate full source history and distribution archives during CI and packaging.
