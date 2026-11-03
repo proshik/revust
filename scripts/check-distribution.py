@@ -40,7 +40,8 @@ def product_path(name):
     require(not path.is_absolute() and str(path) == name and
             not any(p in {'', '.', '..'} for p in path.parts), 'unsafe archive or product path')
     require(not any(p in WORKFLOW_DIRS for p in path.parts) and
-            path.name not in WORKFLOW_NAMES and not path.name.startswith('.env'),
+            (path.name not in WORKFLOW_NAMES or name == 'AGENTS.md') and
+            not path.name.startswith('.env'),
             'workflow path is not a product file')
     return name
 
@@ -78,6 +79,8 @@ def manifest(data):
         require(len(names) == len(set(names)), 'duplicate ' + kind + ' manifest path')
         for name in names:
             product_path(name)
+        if kind == 'payload':
+            require('AGENTS.md' not in names, 'AGENTS.md is a source-only document')
         value[kind] = set(names)
     require({'distribution.json', 'Cargo.lock', 'LICENSE'} <= value['source'] and
             {'distribution.json', 'Cargo.lock', 'LICENSE'} <= value['payload'] <= value['source'],

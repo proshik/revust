@@ -7,6 +7,7 @@
     ".github/workflows/ci.yml",
     ".github/workflows/release-candidate.yml",
     ".gitignore",
+    "AGENTS.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
     "Cargo.lock",

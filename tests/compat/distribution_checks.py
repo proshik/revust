@@ -14,6 +14,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CHECK = ROOT / 'scripts/check-distribution.py'
 NOREPLY = '123+fixture@users.noreply.github.com'
+WORKFLOW_PATHS = ('AGENTS.override.md', 'CLAUDE.md', 'Plan.md', 'docs/AGENTS.md',
+                  '.env', '.git/config', '.guild/state', '.local/state',
+                  '.codex/config', '.agents/skill.md', '.claude/settings.json',
+                  '.revust/config')
 
 
 class Distribution(unittest.TestCase):
@@ -96,12 +100,14 @@ class Distribution(unittest.TestCase):
                 member.uname = member.gname = 'root'
                 tar.addfile(member, io.BytesIO(data))
 
-    def package(self, *, extra=None, local_path=False, uid=0, special=None,
+    def package(self, *, extra=None, source_extra=None, local_path=False, uid=0, special=None,
                 duplicate=None, omit_notice=False, altered_source=False, bad_receipt=False):
         revision = self.git('rev-parse', 'HEAD')
         source = {name: (self.repo / name).read_bytes() for name in self.manifest['source']}
         if altered_source:
             source['README.md'] = b'Unexpected altered source\n'
+        if source_extra:
+            source.update(source_extra)
         self.archive(self.artifacts / 'revust-source.tar.gz', source)
         payload = {name: (self.repo / name).read_bytes() for name in self.manifest['payload']}
         payload['bin/revust'] = (('/' + 'Users' + '/fixture/build/cli').encode()
@@ -142,12 +148,46 @@ class Distribution(unittest.TestCase):
         self.commit()
         self.assert_rejected(self.invoke(), 'source manifest')
 
-    def test_workflow_file_cannot_be_approved_by_manifest(self):
-        (self.repo / 'Plan.md').write_text('Synthetic workflow')
-        self.manifest['source'].append('Plan.md')
+    def test_root_agents_source_and_complete_package_are_accepted(self):
+        (self.repo / 'AGENTS.md').write_text('Synthetic public contributor instructions\n')
+        self.manifest['source'].append('AGENTS.md')
         self.write_manifest()
         self.commit()
-        self.assert_rejected(self.invoke(), 'workflow path')
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.package()
+        result = self.invoke(artifacts=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_root_agents_cannot_be_approved_for_payload(self):
+        (self.repo / 'AGENTS.md').write_text('Synthetic public contributor instructions\n')
+        for kind in ('source', 'payload'):
+            self.manifest[kind].append('AGENTS.md')
+        self.write_manifest()
+        self.commit()
+        self.assert_rejected(self.invoke(), 'source-only')
+
+    def test_workflow_files_cannot_be_approved_by_source_manifest(self):
+        for name in WORKFLOW_PATHS:
+            with self.subTest(path=name):
+                # No forbidden file is needed: even approval in the manifest must fail.
+                self.manifest['source'].append(name)
+                self.write_manifest()
+                self.commit()
+                self.assert_rejected(self.invoke(), 'workflow path')
+                self.git('reset', '--hard', 'HEAD^')
+                self.manifest['source'].remove(name)
+
+    def test_workflow_files_in_archives_are_rejected_with_valid_checksums(self):
+        for name in WORKFLOW_PATHS:
+            for kind in ('source_extra', 'extra'):
+                with self.subTest(path=name, archive=kind):
+                    self.package(**{kind: {name: b'Synthetic workflow\n'}})
+                    self.assert_rejected(self.invoke(artifacts=True), 'workflow path')
+
+    def test_root_agents_in_payload_is_rejected_with_valid_checksums(self):
+        self.package(extra={'AGENTS.md': b'Synthetic contributor instructions\n'})
+        self.assert_rejected(self.invoke(artifacts=True), 'workflow path')
 
     def test_historical_private_email_is_rejected_without_printing_it(self):
         email = 'fixture-personal@example.test'
