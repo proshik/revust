@@ -34,6 +34,24 @@ impl Journal {
         self.save_preparation_metadata("extension-profile.json", &metadata)
     }
 
+    /// Preserve raw winning prompt observations, independently of composed requests.
+    pub fn save_prompt_snapshots(
+        &self,
+        snapshots: &[crate::plan::PromptSnapshot],
+    ) -> Result<(), String> {
+        let prompts: Vec<_> = snapshots.iter().map(|snapshot| serde_json::json!({
+            "path": snapshot.origin.path,
+            "layer": snapshot.origin.layer,
+            "source": snapshot.origin.source,
+            "sha256": Sha256::digest(snapshot.content.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
+            "content": snapshot.content,
+        })).collect();
+        self.save_preparation_metadata(
+            "prompt-snapshots.json",
+            &serde_json::json!({"version": 1, "prompts": prompts}),
+        )
+    }
+
     /// Archive resolved policy and origins without exposing child environment values.
     pub fn save_policy(
         &self,

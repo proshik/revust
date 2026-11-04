@@ -107,6 +107,8 @@ impl Journal {
         let result = (|| {
             let bytes = event.clone().json()?;
             let file = state.legacy_events.as_mut().ok_or("event stream closed")?;
+            let size = file.metadata().map_err(|e| e.to_string())?.len();
+            crate::archive::check_size("events.jsonl", size.saturating_add(bytes.len() as u64))?;
             file.write_all(&bytes)
                 .and_then(|_| file.sync_all())
                 .map_err(|e| e.to_string())
@@ -132,6 +134,8 @@ impl Journal {
         let mut state = self.state.lock().map_err(|_| "journal lock poisoned")?;
         state.writable()?;
         let result: std::io::Result<()> = (|| {
+            crate::archive::check_size(evidence::checkpoint(stage), bytes.len() as u64)
+                .map_err(std::io::Error::other)?;
             if state.stages_directory.is_none() {
                 match mkdirat(
                     &self.round_directory,

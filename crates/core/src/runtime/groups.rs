@@ -41,8 +41,10 @@ fn label(keys: &[String]) -> String {
     }
     if text.is_empty() { "root".into() } else { text }
 }
-fn distinct(base: String, used: &mut BTreeSet<String>) -> String {
-    (1..)
+fn distinct(mut base: String, used: &mut BTreeSet<String>) -> String {
+    // Labels are ASCII. Reserve room for collision counters and prompt suffixes.
+    base.truncate(160);
+    (1_u64..)
         .map(|n| {
             if n == 1 {
                 base.clone()

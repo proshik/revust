@@ -333,3 +333,19 @@ fn concurrent_claims_admit_one_owner_and_preserve_unmarked_outputs() {
     );
     assert_eq!(fs::read(t.round().join("manifest.json")).unwrap(), b"");
 }
+
+#[test]
+fn oversized_artifacts_cannot_be_written_or_blessed_by_a_completion_marker() {
+    let t = Temp::new();
+    let mut archive = Archive::claim(&t.tasks(), "test", "01").unwrap();
+    let bytes = vec![b' '; (256 << 20) + 1];
+    let error = archive.write("findings.json".as_ref(), &bytes).unwrap_err();
+    assert!(error.contains("size limit"));
+    assert!(!t.round().join("findings.json").exists());
+    assert!(archive.finish(&bytes).unwrap_err().contains("size limit"));
+    assert!(archive.finish(b"{}").is_err());
+    assert_eq!(
+        fs::metadata(t.round().join("manifest.json")).unwrap().len(),
+        0
+    );
+}

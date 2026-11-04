@@ -524,7 +524,7 @@ fn legacy_agent_tees_keep_owned_files_and_refuse_collisions() {
     journal.record(Event::Started(&retry)).unwrap();
     symlink(
         agents.join("reviewer.log"),
-        round.0.join("owned-agents/reviewer.retry.log"),
+        round.0.join("owned-agents/reviewer~retry-1.log"),
     )
     .unwrap();
     assert!(journal.open_agent_stream(&retry, "codex").is_err());
@@ -556,4 +556,67 @@ fn physical_prompt_destination_cannot_acquire_a_second_unit_owner() {
             .save_prompt(Stage::Synthesis, "first-unit", b"later")
             .is_err()
     );
+}
+
+#[test]
+fn retry_streams_do_not_alias_supported_finder_names() {
+    for executor in ["codex", "claude"] {
+        let round = Round::new();
+        let journal = Journal::create(&round.0, identity()).unwrap();
+        for (unit, number) in [
+            ("a", 0),
+            ("a", 1),
+            ("a.retry", 0),
+            ("a.retry-2", 0),
+            ("a", 2),
+            ("a~retry-1", 0),
+        ] {
+            let id = Attempt {
+                stage: Stage::Find,
+                unit: unit.into(),
+                number,
+            };
+            journal.record(Event::Started(&id)).unwrap();
+            journal.open_agent_stream(&id, executor).unwrap();
+            journal
+                .append(&id, Stream::Stdout, format!("{unit}:{number}").as_bytes())
+                .unwrap();
+        }
+        let mut contents: Vec<_> = std::fs::read_dir(round.0.join("agents"))
+            .unwrap()
+            .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+            .collect();
+        contents.sort();
+        assert_eq!(
+            contents,
+            [
+                "a.retry-2:0",
+                "a.retry:0",
+                "a:0",
+                "a:1",
+                "a:2",
+                "a~retry-1:0"
+            ]
+        );
+    }
+}
+
+#[test]
+fn presentation_aggregate_limit_fails_before_observation_and_completion() {
+    let round = Round::new();
+    let journal = Journal::create(&round.0, identity()).unwrap();
+    let observer = journal.subscribe().unwrap();
+    // Sparse growth exercises the aggregate boundary without a huge allocation.
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(round.0.join("events.jsonl"))
+        .unwrap()
+        .set_len(256 << 20)
+        .unwrap();
+    let error = journal
+        .publish(revust_core::runtime::events::Event::stage("find"))
+        .unwrap_err();
+    assert!(error.contains("size limit"), "{error}");
+    assert!(observer.try_iter().next().is_none());
+    assert!(journal.finish(&report()).is_err());
 }

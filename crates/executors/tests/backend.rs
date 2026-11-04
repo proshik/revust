@@ -746,6 +746,15 @@ fn failed_synthesis_does_not_publish_a_successful_stage_snapshot() {
     let result = backend.run_report(&control).unwrap();
     assert_eq!(result.runtime.state, State::Failed);
     assert_eq!(control.calls_spent(), 4);
+    let events: Vec<Value> = fs::read_to_string(temp.0.join("tasks/test/01/events.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let terminal = events.iter().rfind(|e| e["agent"] == "synthesis").unwrap();
+    assert_eq!(terminal["kind"], "agent_degraded");
+    assert!(!terminal["text"].as_str().unwrap().is_empty());
+
     let round = temp.0.join("tasks/test/01");
     assert!(round.join("stages/1-found.json").exists());
     assert!(!round.join("stages/2-synthesized.json").exists());
@@ -995,5 +1004,40 @@ fn opencode_protocol_diagnostics_reach_saved_attempts_and_user_events() {
             adapter_hint,
             "case {index}: {delivery}",
         );
+    }
+}
+
+#[test]
+fn preparation_persists_raw_frozen_prompts_after_sources_disappear() {
+    let (temp, plan, journal) = setup(97);
+    let expected: Vec<_> = plan
+        .prompt_snapshots()
+        .iter()
+        .map(|s| (s.origin.path.clone(), s.content.clone()))
+        .collect();
+    assert!(!expected.is_empty());
+    for snapshot in plan.prompt_snapshots() {
+        if let Some(source) = &snapshot.origin.source {
+            let _ = fs::remove_file(source);
+        }
+    }
+    let _backend = Backend::prepare(
+        plan,
+        journal,
+        Options::default(),
+        |_, _| {},
+        |_| Duration::ZERO,
+    )
+    .unwrap();
+    let saved: Value = serde_json::from_slice(
+        &fs::read(temp.0.join("tasks/test/01/revust/prompt-snapshots.json")).unwrap(),
+    )
+    .unwrap();
+    let snapshots = saved["prompts"].as_array().unwrap();
+    assert_eq!(snapshots.len(), expected.len());
+    for ((path, content), actual) in expected.iter().zip(snapshots) {
+        assert_eq!(actual["path"], *path);
+        assert_eq!(actual["content"], *content);
+        assert_eq!(actual["sha256"].as_str().unwrap().len(), 64);
     }
 }

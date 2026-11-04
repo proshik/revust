@@ -1,12 +1,11 @@
 //! Read-only completed archive loading. It owns no execution or repair capability.
+use super::FILE_LIMIT;
 use crate::{
     report::{ExecutionOutcome, Report, SourceStat, StageRun},
     runtime::data::Finding,
 };
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io::Read, path::Path};
-const FILE_LIMIT: u64 = 64 << 20;
-const EVENT_LIMIT: usize = 4 << 20;
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Agent {
@@ -99,7 +98,7 @@ pub fn load(path: &Path) -> Result<ArchivedRun, String> {
         .split_inclusive(|byte| *byte == b'\n')
         .enumerate()
     {
-        if bytes.len() >= EVENT_LIMIT {
+        if bytes.len() as u64 > FILE_LIMIT {
             return Err(format!("archive event {} exceeds size limit", index + 1));
         }
         let event: Event =

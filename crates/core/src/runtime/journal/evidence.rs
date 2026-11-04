@@ -19,9 +19,10 @@ pub(super) fn agent_stream(id: &Attempt, executor: &str) -> io::Result<String> {
     unit_name(&id.unit)?;
     let retry = match id.number {
         0 => String::new(),
-        1 => ".retry".to_owned(),
-        number => format!(".retry-{number}"),
+        number => format!("~retry-{number}"),
     };
     let extension = if executor == "codex" { "log" } else { "jsonl" };
-    Ok(format!("{}{retry}.{extension}", id.unit))
+    // Escape the delimiter so authored names cannot impersonate retry suffixes.
+    let unit = id.unit.replace('~', "~~");
+    Ok(format!("{unit}{retry}.{extension}"))
 }

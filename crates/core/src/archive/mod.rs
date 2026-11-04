@@ -11,6 +11,17 @@ use std::{
     os::unix::fs::MetadataExt,
     path::{Component, Path},
 };
+// Shared writer/replay ceiling, including JSON framing and aggregate events.
+// Larger evidence fails persistence explicitly; no completed unreadable archive.
+pub(crate) const FILE_LIMIT: u64 = 256 << 20;
+pub(crate) fn check_size(name: &str, size: u64) -> Result<(), String> {
+    if size > FILE_LIMIT {
+        Err(format!("archive {name} exceeds size limit"))
+    } else {
+        Ok(())
+    }
+}
+
 pub struct Archive {
     directory: File,
     path: std::path::PathBuf,
@@ -98,6 +109,7 @@ impl Archive {
         if self.finished {
             return Err("archive is finished".into());
         }
+        check_size(&path.display().to_string(), bytes.len() as u64)?;
         let components = artifact_components(path)?;
         let (file, parents) = components.split_last().ok_or("empty artifact name")?;
         let mut directory = self.directory.try_clone().map_err(error)?;
@@ -155,6 +167,7 @@ impl Archive {
             return Err("manifest must be nonempty and written once".into());
         }
         self.finished = true;
+        check_size("manifest.json", bytes.len() as u64)?;
         self.marker
             .write_all(bytes)
             .and_then(|_| self.marker.sync_all())

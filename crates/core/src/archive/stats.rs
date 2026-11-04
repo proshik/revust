@@ -383,7 +383,7 @@ fn count_retries(round: &File, result: &mut TaskStats) -> Result<(), String> {
         return Ok(());
     };
     for (index, line) in bytes.split_inclusive(|byte| *byte == b'\n').enumerate() {
-        if line.len() >= 4 << 20 {
+        if line.len() as u64 > super::FILE_LIMIT {
             return Err("event exceeds size limit".into());
         }
         match reader::decode::<Retry>(line) {

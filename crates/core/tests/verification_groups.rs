@@ -73,3 +73,33 @@ fn displayed_verifier_names_are_short_and_have_their_own_collision_space() {
         ["root", "pkg", "pkg-2", "pkg-2-2"]
     );
 }
+
+#[test]
+fn merged_long_directory_labels_fit_prompt_basenames_and_remain_distinct() {
+    let inputs: Vec<_> = ['a', 'b', 'c']
+        .into_iter()
+        .map(|c| finding(&format!("{}/file.rs", c.to_string().repeat(90)), "source"))
+        .collect();
+    let groups = group(&inputs, false, 2, None);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].keys.len(), 3);
+    assert!(format!("verify-{}.md", groups[0].name).len() <= 255);
+    let inputs: Vec<_> = (0..20)
+        .map(|n| finding(&format!("{}{n}/file.rs", "x".repeat(240)), "source"))
+        .collect();
+    let groups = group(&inputs, false, 1, None);
+    let names: std::collections::BTreeSet<_> = groups.iter().map(|g| &g.name).collect();
+    assert_eq!(names.len(), 20);
+    assert!(
+        names
+            .iter()
+            .all(|name| format!("verify-{name}.md").len() <= 255)
+    );
+    assert_eq!(
+        groups.iter().map(|g| &g.name).collect::<Vec<_>>(),
+        group(&inputs, false, 1, None)
+            .iter()
+            .map(|g| &g.name)
+            .collect::<Vec<_>>()
+    );
+}

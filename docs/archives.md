@@ -9,6 +9,21 @@ extra acceptance evidence. Failed attempts are never concatenated into a later
 attempt's apparent successful output. Raw authored prompt/profile observations
 remain separate from composed requests and original candidates from refinements.
 
+Raw winning prompt documents (including frontmatter and whitespace) are frozen in
+`revust/prompt-snapshots.json` with path, layer, source and SHA-256. Extension-only
+profiles retain their separate `revust/extension-profile.json` observation.
+Neither artifact is reconstructed from current source files or composed requests.
+Finder stdout tees use `agents/<escaped-name>~retry-N.log` (Codex) or `.jsonl`
+for retries; initial attempts omit the retry suffix. Literal `~` is doubled.
+Old flat retry files remain readable; attempt identity and authoritative streams
+are also retained in the numeric `revust/attempts/` directories.
+
+Replay and new writers share a 256 MiB inclusive file ceiling for reports,
+manifest, stage snapshots and the aggregate presentation event stream. This
+allows large individual and combined findings without the old 4 MiB event
+mismatch. Exceeding the ceiling is an explicit persistence error before a final
+marker, never truncation or silent evidence loss. Untrusted reads remain bounded.
+
 Writers use descriptor-relative contained paths, exclusive files and advisory
 claim locks. Completed evidence is not overwritten. A nonempty marker alone is
 not sufficient for valid replay: identity, completion and required artifacts are

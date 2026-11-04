@@ -33,9 +33,6 @@ fn outcome_events(
     unit: &UnitResult<Categories>,
 ) -> Vec<Event> {
     if unit.outcome != Outcome::Success {
-        if stage == Stage::Synthesis {
-            return Vec::new();
-        }
         let reason = unit
             .attempts
             .last()

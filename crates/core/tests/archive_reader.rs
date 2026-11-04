@@ -74,7 +74,10 @@ fn contained_file_aliases_are_read_but_fifo_and_large_event_records_fail() {
     assert!(reader::load(&t.0).err().unwrap().contains("regular file"));
     fs::remove_file(t.0.join("findings.json")).unwrap();
     symlink("inside/report.json", t.0.join("findings.json")).unwrap();
-    fs::write(t.0.join("events.jsonl"), vec![b' '; 4 << 20]).unwrap();
+    fs::File::create(t.0.join("events.jsonl"))
+        .unwrap()
+        .set_len((256 << 20) + 1)
+        .unwrap();
     assert!(reader::load(&t.0).err().unwrap().contains("size limit"));
 }
 
@@ -342,4 +345,32 @@ fn explicit_saved_outcomes_must_be_typed_and_match_the_report() {
         fs::write(&findings, report.to_string()).unwrap();
         assert!(reader::load(&t.0).is_err());
     }
+}
+
+#[test]
+fn large_single_and_aggregate_finding_events_replay_without_loss() {
+    let t = Temp::new();
+    let body = "x".repeat(5 << 20);
+    let finding = revust_core::runtime::data::Finding {
+        body: body.clone(),
+        ..Default::default()
+    };
+    let event =
+        json!({"kind":"findings", "agent":"a", "at":"2026-10-10T10:00:01Z", "findings":[finding]});
+    fs::write(t.0.join("events.jsonl"), event.to_string()).unwrap();
+    let loaded = reader::load(&t.0).unwrap();
+    assert_eq!(loaded.events[0].findings[0].body, body);
+    // Aggregate report and event stream cross the former whole-file boundary.
+    let findings: Vec<_> = (0..13).map(|_| finding.clone()).collect();
+    fs::write(
+        t.0.join("findings.json"),
+        json!({"scope":{"task":"test","run":"01"},"findings": findings}).to_string(),
+    )
+    .unwrap();
+    let events = (event.to_string() + "\n").repeat(13);
+    fs::write(t.0.join("events.jsonl"), events).unwrap();
+    let loaded = reader::load(&t.0).unwrap();
+    assert_eq!(loaded.events.len(), 13);
+    assert_eq!(loaded.report.findings.len(), 13);
+    assert!(loaded.report.findings.iter().all(|f| f.body == body));
 }

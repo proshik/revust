@@ -70,6 +70,7 @@ impl<P: Fn(&Attempt, &Event) + Sync, J: Fn(Duration) -> Duration + Sync> Backend
             journal.save_extension_profile(plan.profile(), snapshot)?;
         }
         journal.save_policy(plan.profile(), &plan.definition().policy)?;
+        journal.save_prompt_snapshots(plan.prompt_snapshots())?;
         let definition = plan.definition();
         let values = definition.policy.execution_values();
         let mut selected: Vec<_> = definition
