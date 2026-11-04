@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.5 — 2026-11-04
+
+- Prevent retry evidence filenames from colliding with supported finder names.
+- Bound verification group filenames while preserving full directory keys.
+- Align archive writer and reader size limits so large findings and aggregate
+  event streams remain readable; reject oversized evidence before completion.
+- Preserve frozen raw prompt documents, provenance and hashes separately from
+  composed requests.
+- Record terminal synthesis failure and cancellation states in live and saved
+  views, including passthrough after retries.
+
 ## 0.1.4 — 2026-10-24
 
 - Expand conditional review directions for transaction and messaging guarantees,
