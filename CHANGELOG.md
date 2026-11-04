@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.6 — 2026-11-04
+
+- Prioritize review investigation by changed behavior risks while keeping checks
+  relevant to the assigned scope.
+- Make security data-flow tracing, object/action authorization, tenant scope and
+  sensitive-data exposure checks explicit in the adversarial lens.
+- Inspect changed dependencies, CI and release paths for execution, permissions,
+  secret access and artifact provenance.
+- Reduce repetitive messaging examples across lenses while retaining transaction,
+  delivery, idempotency, recovery, ordering and compatibility safeguards.
+
 ## 0.1.5 — 2026-11-04
 
 - Prevent retry evidence filenames from colliding with supported finder names.
