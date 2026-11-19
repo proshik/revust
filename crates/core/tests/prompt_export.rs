@@ -155,6 +155,8 @@ fn initialization_preserves_configuration_text_without_assignments() {
         &b"max-parallel 4\n"[..],
         b"# settings\n[Application Options]\nmax-parallel 4\n",
         b"# settings\n[Application Options\n",
+        b"[Application Options] max-parallel 4 [draft]\n",
+        b"[   ]\n",
     ] {
         fs::write(&config, authored).unwrap();
         // The CLI validates runtime settings before init; these files pass.
@@ -162,6 +164,10 @@ fn initialization_preserves_configuration_text_without_assignments() {
         initialize(&project, Some(&home), &Invocation::default()).unwrap();
         assert_eq!(fs::read(&config).unwrap(), authored);
     }
+    // The CLI rejects non-UTF-8 settings; the core entry point still keeps them.
+    fs::write(&config, b"# \xff\n").unwrap();
+    initialize(&project, Some(&home), &Invocation::default()).unwrap();
+    assert_eq!(fs::read(&config).unwrap(), b"# \xff\n");
 }
 
 #[test]
