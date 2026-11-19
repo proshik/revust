@@ -14,6 +14,13 @@
   lines, comments and section headers.
 - Warn on stderr, with file and line but never the line text, about config text
   the INI reader ignores and bare carriage returns; parsed values are unchanged.
+- Reject rosters whose finder names differ only by letter case while loading
+  profiles, before a review claims its round.
+- OpenCode lookup skips non-executable files and directories on PATH, selecting
+  the same executable as preflight instead of failing the version probe.
+- Run verification groups on a worker pool bounded by verify and global
+  parallelism and the remaining call budget instead of one thread per group; a
+  refused thread no longer aborts the run before its final report.
 
 ## 0.1.7 — 2026-11-19
 
