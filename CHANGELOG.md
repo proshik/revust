@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Keep every synthesis candidate: inputs synthesis leaves unclaimed stay in
+  findings as reported and are verified when verification is enabled. A null or
+  mistyped stage result array, and a verifier answer that assesses one ID twice,
+  are now invalid output instead of an empty or order-dependent result.
+- Freeze round inputs (scope, goal, profile, context) once before dispatch under
+  `prompts/input/`, so every finder, stage and saved view reads the same bytes.
+  Inputs and prior-round history are read with bounded, contained, nonblocking
+  reads; absolute or escaping links and FIFOs in inputs are refused at planning.
+- `init` no longer replaces a project config that holds any text besides blank
+  lines, comments and section headers.
+- Warn on stderr, with file and line but never the line text, about config text
+  the INI reader ignores and bare carriage returns; parsed values are unchanged.
+
 ## 0.1.7 — 2026-11-19
 
 - Run built-in Codex agents on `gpt-6.2-sol`, and the expert profile's Codex
