@@ -216,7 +216,7 @@ fn restored_roster(manifest: &Manifest) -> Vec<Agent> {
         .collect()
 }
 
-pub(super) fn open_root(path: &Path) -> Result<File, String> {
+pub(crate) fn open_root(path: &Path) -> Result<File, String> {
     use nix::{
         fcntl::{OFlag, open},
         sys::stat::Mode,
@@ -230,7 +230,7 @@ pub(super) fn open_root(path: &Path) -> Result<File, String> {
     .map_err(|e| format!("open archive {}: {e}", path.display()))
 }
 
-pub(super) fn read(root: &File, name: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn read(root: &File, name: &str) -> Result<Vec<u8>, String> {
     let file = super::open_beneath(root, Path::new(name), false)
         .map_err(|e| format!("read archive {name}: {e}"))?;
     read_file(file, name)

@@ -91,3 +91,49 @@ fn report_timestamps_have_explicit_unknown_and_calendar_boundaries() {
         assert_eq!(actual["rounds"][0]["report_status"], status, "{stamp}");
     }
 }
+
+#[test]
+fn history_marks_nonregular_and_escaping_reports_unreadable() {
+    use std::os::unix::fs::symlink;
+    let t = Tree(std::env::temp_dir().join(format!("revust-history-reads-{}", std::process::id())));
+    let task = t.0.join("task");
+    fs::create_dir_all(&task).unwrap();
+    let outside = t.0.join("outside.json");
+    fs::write(
+        &outside,
+        json!({"findings":[{"severity":"critical"}],"sources":{"expected":9}}).to_string(),
+    )
+    .unwrap();
+    for name in ["fifo", "relative-escape", "absolute-link"] {
+        let dir = task.join(name);
+        fs::create_dir(&dir).unwrap();
+        fs::write(dir.join("manifest.json"), "{}").unwrap();
+    }
+    nix::unistd::mkfifo(
+        &task.join("fifo/findings.json"),
+        nix::sys::stat::Mode::S_IRUSR | nix::sys::stat::Mode::S_IWUSR,
+    )
+    .unwrap();
+    symlink(
+        "../../outside.json",
+        task.join("relative-escape/findings.json"),
+    )
+    .unwrap();
+    symlink(&outside, task.join("absolute-link/findings.json")).unwrap();
+    // A blocking read of the FIFO would wait for a writer forever.
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let root = task.clone();
+    std::thread::spawn(move || sender.send(inventory(&root)));
+    let text = receiver
+        .recv_timeout(Duration::from_secs(10))
+        .expect("history inventory must not block on a FIFO report")
+        .unwrap();
+    let data: Value = serde_json::from_str(&text).unwrap();
+    let rounds = data["rounds"].as_array().unwrap();
+    assert_eq!(rounds.len(), 3);
+    for round in rounds {
+        assert_eq!(round["report_status"], "unreadable", "{round}");
+        assert!(round["finding_counts"].is_null(), "{round}");
+        assert!(round["sources"].is_null(), "{round}");
+    }
+}

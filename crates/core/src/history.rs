@@ -65,7 +65,10 @@ pub fn inventory(task: &Path) -> Result<String, String> {
             finding_counts: None,
             sources: None,
         };
-        let observed = fs::read(directory.join("findings.json"))
+        // Prior reports are untrusted archive content: use the bounded,
+        // descriptor-contained, nonblocking reader and skip rejected artifacts.
+        let observed = crate::archive::reader::open_root(&directory)
+            .and_then(|root| crate::archive::reader::read(&root, "findings.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Option<Observation>>(&bytes).ok())
             .map(Option::unwrap_or_default);

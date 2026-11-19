@@ -53,7 +53,9 @@ rejected. Marker ownership is checked under a shared nonblocking lock; descendan
 still use bounded contained reads. This compatibility path never resumes execution.
 
 The viewer uses saved settings, observed identity and report data, never today's
-provider accounts or reusable profiles. Reopening cannot rerun a review. History
+provider accounts or reusable profiles. Reopening cannot rerun a review. Prompt
+history reads prior reports with the same bounded, contained, nonblocking reader;
+a link, FIFO or oversized report is listed as unreadable. History
 and statistics omit private finding bodies; aggregate counts describe recorded
 observations, not total work or causal quality. Missing telemetry is unknown, and
 zero fields in older formats may mean zero or unavailable. Failed/partial attempt
