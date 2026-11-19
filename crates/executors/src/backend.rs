@@ -63,7 +63,9 @@ impl<P: Fn(&Attempt, &Event) + Sync, J: Fn(Duration) -> Duration + Sync> Backend
         progress: P,
         jitter: J,
     ) -> Result<Self, String> {
-        if plan.round() != journal.round() {
+        // Frozen inputs belong to the directory planning read, not merely to
+        // the same pathname.
+        if plan.round() != journal.round() || plan.round_identity() != journal.round_identity()? {
             return Err("execution plan and journal have different rounds".into());
         }
         if let Some(snapshot) = plan.extension_profile_snapshot() {

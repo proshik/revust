@@ -47,19 +47,19 @@ fn setup_with_inputs(
     fs::write(config.join("profile.md"), "frozen calibration").unwrap();
     fs::write(
         config.join("prompts/synthesis.md"),
-        "SYNTHESIS\n{{FINDINGS}}\n{{SOURCES}}\n{{SCOPE}} {{GOAL}} {{CONTEXT}}\n",
+        "SYNTHESIS\n{{FINDINGS}}\n{{SOURCES}}\n{{SCOPE}} {{GOAL}} {{PROFILE}} {{CONTEXT}}\n",
     )
     .unwrap();
     fs::write(
         config.join("prompts/verify.md"),
-        "VERIFY\n{{FINDINGS}}\n{{SCOPE}} {{GOAL}} {{CONTEXT}}\n",
+        "VERIFY\n{{FINDINGS}}\n{{SCOPE}} {{GOAL}} {{PROFILE}} {{CONTEXT}}\n",
     )
     .unwrap();
     let executors = ["claude", "codex", "opencode"];
     let synthesis = executors[index % 3];
     let verify = executors[(index + 1) % 3];
     let profile = format!(
-        "---\nrunner:\n  executor: claude\n  model: fixture/model\nagents:\n  - name: a\n    lenses: [bugs]\n    runner:\n      executor: claude\n      model: fixture/model\n  - name: b\n    lenses: [bugs]\n    runner:\n      executor: codex\n      model: fixture/model\n  - name: c\n    lenses: [bugs]\n    runner:\n      executor: opencode\n      model: fixture/model\nstages:\n  synthesis:\n    executor: {synthesis}\n    model: fixture/model\n  verify:\n    executor: {verify}\n    model: fixture/model\n---\nFIND\n{{{{SCOPE}}}} {{{{GOAL}}}} {{{{CONTEXT}}}}\n"
+        "---\nrunner:\n  executor: claude\n  model: fixture/model\nagents:\n  - name: a\n    lenses: [bugs]\n    runner:\n      executor: claude\n      model: fixture/model\n  - name: b\n    lenses: [bugs]\n    runner:\n      executor: codex\n      model: fixture/model\n  - name: c\n    lenses: [bugs]\n    runner:\n      executor: opencode\n      model: fixture/model\nstages:\n  synthesis:\n    executor: {synthesis}\n    model: fixture/model\n  verify:\n    executor: {verify}\n    model: fixture/model\n---\nFIND\n{{{{SCOPE}}}} {{{{GOAL}}}} {{{{PROFILE}}}} {{{{CONTEXT}}}}\n"
     );
     fs::write(config.join("extension-profiles/mixed.md"), profile).unwrap();
     let mut overrides = json!({});
@@ -1058,12 +1058,14 @@ fn preparation_persists_raw_frozen_prompts_after_sources_disappear() {
 fn providers_stages_and_archive_share_inputs_frozen_before_dispatch() {
     let (temp, plan, journal) = setup_with_inputs(3, json!({}), |input| {
         fs::write(input.join("goal.md"), "synthetic goal").unwrap();
+        fs::write(input.join("profile.md"), "round calibration").unwrap();
         fs::create_dir_all(input.join("context/nested")).unwrap();
         fs::write(input.join("context/nested/notes.md"), "original notes").unwrap();
     });
     let round = temp.0.join("tasks/test/01");
     // The live inputs change after planning, as between staggered finder starts.
     fs::write(round.join("input/scope.md"), "edited scope").unwrap();
+    fs::write(round.join("input/profile.md"), "edited calibration").unwrap();
     fs::write(round.join("input/context/nested/notes.md"), "edited notes").unwrap();
     fs::write(round.join("input/context/late.md"), "added later").unwrap();
     let control = RunControl::new(
@@ -1085,6 +1087,10 @@ fn providers_stages_and_archive_share_inputs_frozen_before_dispatch() {
     assert_eq!(
         fs::read_to_string(frozen.join("goal.md")).unwrap(),
         "synthetic goal"
+    );
+    assert_eq!(
+        fs::read_to_string(frozen.join("profile.md")).unwrap(),
+        "round calibration"
     );
     assert_eq!(
         fs::read_to_string(frozen.join("context/nested/notes.md")).unwrap(),
@@ -1110,6 +1116,7 @@ fn providers_stages_and_archive_share_inputs_frozen_before_dispatch() {
     let expected = [
         scope.clone(),
         frozen.join("goal.md"),
+        frozen.join("profile.md"),
         frozen.join("context"),
     ];
     for prompt in &prompts {
@@ -1140,4 +1147,34 @@ fn preparation_refuses_input_snapshots_over_unplanned_files() {
     .err()
     .expect("an existing frozen input tree is not ours");
     assert!(error.contains("persist input snapshot"), "{error}");
+}
+
+#[test]
+fn preparation_refuses_a_round_replaced_after_planning() {
+    let (temp, plan, journal) = setup(5);
+    drop(journal);
+    let round = temp.0.join("tasks/test/01");
+    fs::rename(&round, temp.0.join("tasks/test/planned")).unwrap();
+    fs::create_dir_all(round.join("input")).unwrap();
+    fs::write(round.join("input/scope.md"), "replacement scope").unwrap();
+    let journal = Journal::create(
+        &round,
+        Identity {
+            task: "test".into(),
+            run: "01".into(),
+            request: "synthetic".into(),
+        },
+    )
+    .unwrap();
+    let error = Backend::prepare(
+        plan,
+        journal,
+        Options::default(),
+        |_, _| {},
+        |_| Duration::ZERO,
+    )
+    .err()
+    .expect("frozen inputs belong to the planned directory");
+    assert!(error.contains("different rounds"), "{error}");
+    assert!(!round.join("prompts").exists());
 }

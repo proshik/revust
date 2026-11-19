@@ -45,6 +45,8 @@ pub struct PromptPlan {
     input_paths: execution::InputPaths,
     #[serde(skip)]
     frozen_inputs: Vec<execution::InputSnapshot>,
+    #[serde(skip)]
+    round_identity: (u64, u64),
 }
 
 #[derive(Serialize)]
@@ -108,6 +110,7 @@ impl PromptPlan {
             profile_snapshot,
             snapshot_bytes,
             input_snapshots: frozen_inputs,
+            round_identity,
             history,
         } = context::resolve(paths)?;
         let profile = configuration
@@ -228,6 +231,7 @@ impl PromptPlan {
         Ok(Self {
             input_paths,
             frozen_inputs,
+            round_identity,
             prompt_snapshots,
             extension_profile_snapshot,
             scope: crate::report::Scope {

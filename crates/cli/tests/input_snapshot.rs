@@ -266,7 +266,7 @@ fn archive_sources_preserve_snapshot_priority_and_missing_input_diagnostics() {
     tree.file("input/profile.md", b"round calibration");
     // Snapshot presence wins, including empty and dangling snapshots.
     let snapshot = tree.file("prompts/input-profile.md", b"saved project calibration");
-    let documents = || Snapshot::default().load(&Sources::archive(&tree.0).unwrap());
+    let documents = || Snapshot::default().load(&Sources::archive(&tree.0, "").unwrap());
     let docs = documents();
     assert_eq!(docs[0].content, "archived scope");
     assert_eq!(docs[1].content, "saved project calibration");
@@ -378,8 +378,8 @@ fn explicitly_selected_archive_root_alias_keeps_its_read_only_observations() {
     fs::write(tree.0.join("input/scope.md"), "saved scope").unwrap();
     let alias = tree.0.join("archive-alias");
     std::os::unix::fs::symlink(&tree.0, &alias).unwrap();
-    let direct = Snapshot::default().load(&Sources::archive(&tree.0).unwrap());
-    let linked = Snapshot::default().load(&Sources::archive(&alias).unwrap());
+    let direct = Snapshot::default().load(&Sources::archive(&tree.0, "").unwrap());
+    let linked = Snapshot::default().load(&Sources::archive(&alias, "").unwrap());
     assert_eq!(direct[0].content, linked[0].content);
     assert_eq!(linked[0].content, "saved scope");
     assert_eq!(linked[0].path, "input/scope.md");
@@ -436,7 +436,9 @@ fn archive_sources_prefer_inputs_frozen_before_dispatch() {
     tree.file("prompts/input/scope.md", b"scope the providers read");
     tree.file("prompts/input/goal.md", b"");
     tree.file("prompts/input/context/notes.md", b"frozen notes");
-    let docs = Snapshot::default().load(&Sources::archive(&tree.0).unwrap());
+    let saved_scope = tree.0.join("prompts/input/scope.md");
+    let saved_scope = saved_scope.to_str().unwrap();
+    let docs = Snapshot::default().load(&Sources::archive(&tree.0, saved_scope).unwrap());
     assert_eq!(
         docs.iter()
             .map(|d| (d.label.as_str(), d.content.as_str()))
@@ -447,9 +449,16 @@ fn archive_sources_prefer_inputs_frozen_before_dispatch() {
             ("notes.md", "frozen notes")
         ]
     );
-    // Archives saved before inputs were frozen still read input/.
+    // A frozen-layout archive missing its copies never shows editable input/.
     fs::remove_dir_all(tree.0.join("prompts/input")).unwrap();
-    let docs = Snapshot::default().load(&Sources::archive(&tree.0).unwrap());
+    let docs = Snapshot::default().load(&Sources::archive(&tree.0, saved_scope).unwrap());
+    assert!(docs[0].content.is_empty());
+    assert!(docs[0].notice.starts_with("Snapshot unavailable [read]:"));
+    assert!(docs.iter().all(|d| !d.content.contains("edited")));
+    // Archives saved before inputs were frozen still read input/.
+    let legacy = tree.0.join("input/scope.md");
+    let docs =
+        Snapshot::default().load(&Sources::archive(&tree.0, legacy.to_str().unwrap()).unwrap());
     assert_eq!(docs[0].content, "edited after the review");
     assert_eq!(docs[1].content, "edited notes");
 }

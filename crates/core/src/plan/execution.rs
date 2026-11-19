@@ -46,6 +46,7 @@ pub struct ExecutionPlan {
     definition: Definition,
     snapshots: Vec<Snapshot>,
     input_snapshots: Vec<InputSnapshot>,
+    round_identity: (u64, u64),
     find: BTreeMap<String, Request>,
     authored_stages: BTreeMap<String, String>,
     variables: BTreeMap<String, String>,
@@ -119,6 +120,7 @@ impl PromptPlan {
             },
             snapshots,
             input_snapshots: self.frozen_inputs,
+            round_identity: self.round_identity,
             find,
             authored_stages: self.authored_stages,
             variables: self.variables,
@@ -163,6 +165,10 @@ impl ExecutionPlan {
     }
     pub fn snapshots(&self) -> &[Snapshot] {
         &self.snapshots
+    }
+    /// Device and inode of the round directory whose inputs planning froze.
+    pub fn round_identity(&self) -> (u64, u64) {
+        self.round_identity
     }
     /// Frozen round inputs, written below prompts/input/ before any dispatch.
     pub fn input_snapshots(&self) -> &[InputSnapshot] {

@@ -182,6 +182,15 @@ impl Journal {
     pub fn round(&self) -> &Path {
         self.root.parent().expect("journal has round parent")
     }
+    /// Device and inode of the claimed round directory this journal writes into.
+    pub fn round_identity(&self) -> Result<(u64, u64), String> {
+        use std::os::unix::fs::MetadataExt;
+        let info = self
+            .round_directory
+            .metadata()
+            .map_err(|e| format!("stat claimed round: {e}"))?;
+        Ok((info.dev(), info.ino()))
+    }
     /// Frozen calibration is a legacy artifact, owned by the same round handle.
     pub fn save_calibration(&self, bytes: &[u8]) -> Result<(), String> {
         let mut state = self.state.lock().map_err(|_| "journal lock poisoned")?;

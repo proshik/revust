@@ -9,7 +9,7 @@ use std::{
     collections::BTreeMap,
     ffi::OsString,
     fs::{self, File},
-    os::unix::ffi::OsStringExt,
+    os::unix::{ffi::OsStringExt, fs::MetadataExt},
     path::{Path, PathBuf},
 };
 pub(super) struct Resolved {
@@ -18,6 +18,7 @@ pub(super) struct Resolved {
     pub profile_snapshot: Option<PlannedCopy>,
     pub snapshot_bytes: Option<Vec<u8>>,
     pub input_snapshots: Vec<InputSnapshot>,
+    pub round_identity: (u64, u64),
     pub history: String,
 }
 // Context inventory ceiling, matching the input display walk; the shared archive
@@ -93,7 +94,6 @@ impl Freezer {
     fn walk(&mut self, directory: File, relative: &Path) -> Result<(), String> {
         let label = Path::new("input").join(relative);
         let failure = |error: nix::Error| format!("read {}: {error}", label.display());
-        let remaining = ENTRY_LIMIT - self.entries;
         let mut names = Vec::new();
         for entry in nix::dir::Dir::from_fd(directory.into())
             .map_err(failure)?
@@ -102,18 +102,16 @@ impl Freezer {
             let name = entry.map_err(failure)?.file_name().to_bytes().to_owned();
             if name != b"." && name != b".." {
                 names.push(OsString::from_vec(name));
-                // Stop listing once the tree budget is exceeded.
-                if names.len() > remaining {
+                // Every listed name is charged at once against the whole tree,
+                // so nested listings cannot exceed the shared budget.
+                self.entries += 1;
+                if self.entries > ENTRY_LIMIT {
                     return Err(format!("input/context exceeds {ENTRY_LIMIT} entries"));
                 }
             }
         }
         names.sort();
         for name in names {
-            self.entries += 1;
-            if self.entries > ENTRY_LIMIT {
-                return Err(format!("input/context exceeds {ENTRY_LIMIT} entries"));
-            }
             let child = relative.join(&name);
             let source = Path::new("input").join(&child);
             // Each entry resolves from the round root, so relative links stay
@@ -178,6 +176,11 @@ pub(super) fn resolve(paths: &RuntimePaths) -> Result<Resolved, String> {
         entries: 0,
         snapshots: Vec::new(),
     };
+    let round_identity = freezer
+        .root
+        .metadata()
+        .map(|info| (info.dev(), info.ino()))
+        .map_err(|error| format!("stat {}: {error}", round.display()))?;
     let frozen = round.join("prompts/input");
     if !freezer.document("scope.md")? {
         return Err(format!(
@@ -244,6 +247,7 @@ pub(super) fn resolve(paths: &RuntimePaths) -> Result<Resolved, String> {
         profile_snapshot,
         snapshot_bytes,
         input_snapshots: freezer.snapshots,
+        round_identity,
         history: crate::history::inventory(task)?,
     })
 }

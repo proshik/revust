@@ -35,7 +35,8 @@ pub fn load(path: &Path) -> Result<View, String> {
     if report.stats.stages.is_empty() {
         report.stats.stages.extend(manifest.stages);
     }
-    let inputs = Sources::archive(path).map_err(|error| format!("resolve archive: {error}"))?;
+    let inputs = Sources::archive(path, &manifest.scope_path)
+        .map_err(|error| format!("resolve archive: {error}"))?;
     let documents = Snapshot::default().load(&inputs);
     let model = Model::from_saved_events(
         saved_agents.into_iter().map(roster).collect(),

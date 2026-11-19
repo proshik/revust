@@ -16,8 +16,11 @@ bytes are frozen below a newly created `prompts/input/`, and SCOPE, GOAL,
 PROFILE, CONTEXT and the report scope path name the frozen copies, so every
 finder, stage and replay observes the same inputs; later edits to input/ do not
 reach the run. Empty documents and an empty context directory are frozen but
-stay "none provided". Archives saved before this freeze fall back to input/
-when viewed.
+stay "none provided"; an empty round profile still lets the project calibration
+apply, saved as `prompts/input-profile.md`. Preparation refuses a round that is
+not the directory planning read. Saved views use the frozen copies when the
+saved scope path names one (a missing copy is shown as unavailable); archives
+saved before this freeze are viewed from input/.
 
 Raw winning prompt documents (including frontmatter and whitespace) are frozen in
 `revust/prompt-snapshots.json` with path, layer, source and SHA-256. Extension-only

@@ -67,18 +67,15 @@ impl Sources {
             input_dir: None,
         }
     }
-    pub fn archive(path: &Path) -> io::Result<Self> {
+    /// The saved scope path identifies the layout: runs that froze their
+    /// inputs show exactly the frozen copies (missing ones are unavailable),
+    /// while older archives show input/.
+    pub fn archive(path: &Path, saved_scope: &str) -> io::Result<Self> {
         let root = fs::canonicalize(path).or_else(|_| std::path::absolute(path))?;
         let profile = root.join("prompts/input-profile.md");
         let saved = fs::symlink_metadata(&profile).is_ok();
-        // Rounds frozen before dispatch show exactly what providers received.
-        // Older archives have no frozen copy and fall back to input/.
-        let frozen = root.join("prompts/input");
-        let input = if fs::symlink_metadata(&frozen).is_ok() {
-            frozen
-        } else {
-            root.join("input")
-        };
+        let frozen = Path::new(saved_scope).ends_with("prompts/input/scope.md");
+        let input = root.join(if frozen { "prompts/input" } else { "input" });
         Ok(Self {
             scope: input.join("scope.md"),
             goal: None,
