@@ -32,6 +32,22 @@ def descendants(parent):
         own = grown
 
 
+def assert_saved_cancellation(case, binary, archive, cwd, home):
+    """A cancelled round saves one stopped outcome that saved viewing reports read-only."""
+    manifest = json.loads((archive / "manifest.json").read_bytes())
+    report = json.loads((archive / "findings.json").read_bytes())
+    case.assertEqual(manifest["outcome"]["state"], {"stopped": "cancelled"})
+    case.assertEqual(report["outcome"], manifest["outcome"])
+    snapshot = lambda: {str(f.relative_to(archive)): f.read_bytes() for f in archive.rglob("*") if f.is_file()}
+    saved = snapshot()
+    view = subprocess.run([str(binary), "view", "--archive", str(archive), "--no-tui"],
+                          cwd=cwd, env={"HOME": str(home), "PATH": "/nonexistent"},
+                          capture_output=True, timeout=10)
+    case.assertEqual(view.returncode, 2, view.stderr)
+    case.assertEqual(json.loads(view.stdout)["outcome"], report["outcome"])
+    case.assertEqual(snapshot(), saved)
+
+
 def input_text(body):
     # Codex inserts a separate user environment message before the actual stdin.
     messages = ["\n".join(part.get("text", "") for part in item.get("content", [])
@@ -240,7 +256,7 @@ class CodexCLI(unittest.TestCase):
                     self.assertEqual(stdout, b"")
                     self.assertTrue(disconnected.wait(3), "cancelled provider connection remained open")
                     self.assertEqual(len(requests), 1)
-                    self.assertEqual((archive / "manifest.json").read_bytes(), b"")
+                    assert_saved_cancellation(self, binary, archive, root, home)
                 else:
                     self.assertEqual(child.returncode, 1, stderr.decode(errors="replace"))
                     report = json.loads(stdout)

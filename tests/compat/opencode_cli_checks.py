@@ -13,7 +13,7 @@ import time
 import unittest
 
 from claude_cli_checks import reply
-from codex_cli_checks import descendants, process_table
+from codex_cli_checks import assert_saved_cancellation, descendants, process_table
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -157,7 +157,7 @@ class OpenCodeCLI(unittest.TestCase):
                     self.assertEqual(stdout, b"")
                     self.assertTrue(disconnected.wait(3))
                     self.assertEqual(len(requests), 1)
-                    self.assertEqual((archive / "manifest.json").read_bytes(), b"")
+                    assert_saved_cancellation(self, binary, archive, root, home)
                 else:
                     self.assertEqual(child.returncode, 1, stderr.decode(errors="replace"))
                     report = json.loads(stdout)
