@@ -13,7 +13,8 @@
   require selection and cannot shadow ordinary profile IDs.
 - Inspection/validation/dry-run are read-only and call no providers. Init/export
   preserve authored content, including malformed/partial configuration. Writes
-  validate and compare existing identity/bytes before replacement.
+  validate before replacement: init compares existing identity/bytes; extension
+  edits compare bytes under an advisory lock that only revust writers honor.
 
 See [configuration](../../configuration.md), [extensions](../../extensions-v1.md)
 and authored Rust interaction tests for executable examples. Historical captured

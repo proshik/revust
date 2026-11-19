@@ -75,5 +75,9 @@ OPENCODE_CONFIG_CONTENT providers override file entries by ID.
  "options":{"providers_file":"~/.config/opencode/opencode.jsonc"}}}}}
 ```
 
-Configuration edit API validates the entire proposed file and compares inode/bytes
-before atomic replacement, preserving concurrent authored changes.
+Configuration edit API validates the entire proposed file, compares the current
+bytes with the snapshot it read before and after writing a temporary file, then
+renames the temporary file into place. File identity is not compared. An
+adjacent advisory lock serializes revust writers only: an editor that ignores
+it can still save between the last comparison and the rename, and that change
+is overwritten.
