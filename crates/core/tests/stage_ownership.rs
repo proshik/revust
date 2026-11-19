@@ -70,7 +70,7 @@ fn consolidation_never_reassigns_or_invents_evidence_across_categories() {
     }
 }
 #[test]
-fn assessment_preserves_owned_fields_and_originals_with_last_record_precedence() {
+fn assessment_preserves_owned_fields_and_originals_and_ignores_foreign_ids() {
     let originals = [
         Finding {
             id: "a-1".into(),
@@ -88,7 +88,7 @@ fn assessment_preserves_owned_fields_and_originals_with_last_record_precedence()
         },
     ];
     let before = originals.clone();
-    let result=data::verify(&json!({"verdicts":[{"id":"a-1","verdict":"rejected"},{"id":"foreign","verdict":"confirmed"},{"id":"a-1","verdict":"refined","file":[],"sources":"not-authority","lenses":false,"line":11,"body":"new"}]}),&originals).unwrap();
+    let result=data::verify(&json!({"verdicts":[{"id":"foreign","verdict":"confirmed"},{"id":"a-1","verdict":"refined","file":[],"sources":"not-authority","lenses":false,"line":11,"body":"new"}]}),&originals).unwrap();
     assert_eq!(originals, before);
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].file, "owned.rs");

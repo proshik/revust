@@ -330,8 +330,8 @@ pub fn run(
             .policy_failures
             .push("synthesis did not succeed".into());
     }
-    // Synthesis-dropped inputs remain audit evidence, not reported candidates.
-    // All three reported synthesis categories participate, including rejected
+    // Inputs synthesis left unclaimed are already forwarded in findings. All
+    // three reported synthesis categories participate, including rejected
     // verdicts removed from the compatibility findings list.
     if strict
         && candidates.iter().any(|candidate| {

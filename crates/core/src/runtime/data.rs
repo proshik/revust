@@ -24,14 +24,17 @@ pub struct Categories {
     pub open_questions: Vec<Finding>,
     pub pre_existing: Vec<Finding>,
     pub immaterial: Vec<Finding>,
+    /// Synthesis inputs no output claimed. Audit evidence only: the same inputs
+    /// are also forwarded unchanged in `findings`, so verification still sees them.
     pub dropped: Vec<Finding>,
 }
 
+/// A present non-array value, `null` included, violates the stage schema and
+/// must fail the attempt rather than read as an empty result.
 fn array<'a>(value: &'a Value, key: &str, required: bool) -> Result<&'a [Value], String> {
     let fields = value.as_object().ok_or("stage result must be an object")?;
     match fields.get(key) {
         Some(Value::Array(items)) => Ok(items),
-        Some(Value::Null) => Ok(&[]),
         None if !required => Ok(&[]),
         _ => Err(format!("stage result requires {key} array")),
     }
@@ -149,12 +152,15 @@ pub fn synthesize(value: &Value, inputs: &[Finding]) -> Result<Categories, Strin
             target.push(ownership.consolidate(item)?);
         }
     }
-    result.dropped = ownership
-        .originals
-        .into_iter()
-        .filter(|(id, _)| !ownership.claimed.contains(id))
-        .map(|(_, original)| original.clone())
+    // Synthesis organizes candidates; it cannot remove them. An input no output
+    // claimed, whether by model error or an overriding prompt, still reaches
+    // verification as the finder reported it.
+    result.dropped = inputs
+        .iter()
+        .filter(|input| !ownership.claimed.contains(input.id.as_str()))
+        .cloned()
         .collect();
+    result.findings.extend(result.dropped.iter().cloned());
     Ok(result)
 }
 fn assessment(item: &Value) -> Result<Finding, String> {
@@ -214,6 +220,13 @@ pub fn verify(value: &Value, inputs: &[Finding]) -> Result<Vec<Finding>, String>
     let mut patches = BTreeMap::new();
     for item in array(value, "verdicts", true)? {
         let patch = assessment(item)?;
+        // A repeated ID makes the outcome depend on response order.
+        if patches.contains_key(&patch.id) {
+            return Err(format!(
+                "verification assessed ID {} more than once",
+                patch.id
+            ));
+        }
         patches.insert(patch.id.clone(), patch);
     }
     Ok(inputs

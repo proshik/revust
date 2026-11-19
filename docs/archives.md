@@ -22,6 +22,11 @@ not the directory planning read. Saved views use the frozen copies when the
 saved scope path names one (a missing copy is shown as unavailable); archives
 saved before this freeze are viewed from input/.
 
+A `dropped` event in events.jsonl lists synthesis inputs that no output
+claimed. Current writers also forward them unchanged to verification and the
+report; archives written before that change omitted them from both, so the same
+event there records a removal.
+
 Raw winning prompt documents (including frontmatter and whitespace) are frozen in
 `revust/prompt-snapshots.json` with path, layer, source and SHA-256. Extension-only
 profiles retain their separate `revust/extension-profile.json` observation.

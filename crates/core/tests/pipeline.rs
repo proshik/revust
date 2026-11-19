@@ -693,31 +693,49 @@ fn presentation_failure_cancels_before_any_provider_dispatch() {
 }
 
 #[test]
-fn synthesis_drops_and_verifier_changes_are_explained_by_lifecycle_events() {
+fn unclaimed_synthesis_inputs_reach_verification_and_lifecycle_events_explain_changes() {
     use revust_core::runtime::events::Kind;
-    let definition = definition(json!({"runtime":{"stagger_delay":"0s"}}), &["first"]);
+    let definition = definition(
+        json!({"runtime":{"stagger_delay":"0s"},"completeness":{"require_all_verified":true}}),
+        &["first"],
+    );
     let control = control(&definition);
     let backend = backend(|call| {
         Ok(match call.attempt.stage {
             Stage::Find => json!({"findings":[
             {"file":"src/a.rs","title":"kept","severity":"critical"},
-            {"file":"src/b.rs","title":"dropped","severity":"major"}]}),
+            {"file":"src/b.rs","title":"unclaimed","severity":"major"}]}),
             Stage::Synthesis => {
                 json!({"findings":[{"merged_ids":["first-1"],"file":"src/a.rs","title":"merged","severity":"critical"}]})
             }
             Stage::Verify => {
-                json!({"verdicts":[{"id":"first-1","verdict":"refined","severity":"minor"}]})
+                json!({"verdicts":call.findings.iter().map(|f| match f.id.as_str() {
+                    "first-1" => json!({"id":"first-1","verdict":"refined","severity":"minor"}),
+                    id => json!({"id":id,"verdict":"confirmed"}),
+                }).collect::<Vec<_>>()})
             }
         })
     });
-    pipeline::run(&definition, &control, &backend).unwrap();
+    let report = pipeline::run(&definition, &control, &backend).unwrap();
+    assert!(report.policy_satisfied(), "{:?}", report.policy_failures);
+    let unclaimed = report
+        .categories
+        .findings
+        .iter()
+        .find(|f| f.id == "first-2")
+        .expect("an unclaimed input stays a reported candidate");
+    assert_eq!(
+        (unclaimed.title.as_str(), unclaimed.verdict.as_str()),
+        ("unclaimed", "confirmed")
+    );
+    assert_eq!(unclaimed.sources, ["first"]);
     let events = backend.published.lock().unwrap();
     let dropped = events
         .iter()
         .find(|e| matches!(e.kind, Kind::Dropped))
         .unwrap();
     assert_eq!(dropped.findings[0].id, "first-2");
-    assert!(!dropped.text.is_empty());
+    assert!(dropped.text.contains("verification"), "{}", dropped.text);
     let verified = events
         .iter()
         .find(|e| matches!(e.kind, Kind::AgentDone) && e.agent == "verify src")
@@ -780,4 +798,45 @@ fn accounting_rejects_duplicate_attempts_and_ignores_unexecuted_observations() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn malformed_synthesis_arrays_fail_the_stage_instead_of_emptying_the_review() {
+    let d = definition(
+        json!({"completeness":{"require_synthesis_success":true,"require_all_verified":true},"retries":{"synthesis":{"count":0}}}),
+        &["a"],
+    );
+    let c = control(&d);
+    let b = backend(|call| {
+        if call.attempt.stage == Stage::Synthesis {
+            Ok(json!({"findings":null}))
+        } else {
+            answer(call)
+        }
+    });
+    let r = pipeline::run(&d, &c, &b).unwrap();
+    assert!(!r.synthesis_succeeded);
+    assert_eq!(r.state, State::Failed);
+    assert!(!r.policy_satisfied());
+}
+#[test]
+fn contradictory_verdicts_for_one_candidate_cannot_satisfy_strict_verification() {
+    for order in [["confirmed", "rejected"], ["rejected", "confirmed"]] {
+        let d = definition(
+            json!({"completeness":{"require_all_verified":true},"retries":{"verify":{"count":0}}}),
+            &["a"],
+        );
+        let c = control(&d);
+        let b = backend(move |call| {
+            if call.attempt.stage == Stage::Verify {
+                let id = &call.findings[0].id;
+                Ok(json!({"verdicts":[{"id":id,"verdict":order[0]},{"id":id,"verdict":order[1]}]}))
+            } else {
+                answer(call)
+            }
+        });
+        let r = pipeline::run(&d, &c, &b).unwrap();
+        assert!(!r.policy_satisfied(), "{order:?}");
+        assert_eq!(r.categories.findings[0].verdict, "unverified", "{order:?}");
+    }
 }

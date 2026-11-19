@@ -6,7 +6,7 @@
   "properties": {
     "verdicts": {
       "type": "array",
-      "description": "Assessments keyed by the supplied candidate IDs.",
+      "description": "One assessment per supplied candidate ID; an ID cannot be assessed twice.",
       "items": {
         "type": "object",
         "additionalProperties": false,

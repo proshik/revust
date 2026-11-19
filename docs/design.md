@@ -14,8 +14,11 @@ configuration changes cannot alter an active plan.
 Placeholder insertion is one pass; inserted content and appended history are
 literal. Empty/missing optional observations remain distinguishable.
 
-Finders own source identities. Synthesis can consolidate only known input IDs;
-verification retains original identity/location/source ownership and applies
+Finders own source identities. Synthesis can consolidate only known input IDs
+and cannot remove candidates: inputs no output claims, including those a custom
+prompt omits, reach verification unchanged and are listed in a dropped audit
+event. A null or mistyped result array, or a verifier assessing one ID twice, is
+invalid output handled by the retry and failure policy. Verification retains original identity/location/source ownership and applies
 qualified assessment changes to clones. Categories cannot bypass an explicitly
 selected completeness gate. Failed attempts retain partial evidence without
 becoming completed sources. Requested models are intent, not observed telemetry.
