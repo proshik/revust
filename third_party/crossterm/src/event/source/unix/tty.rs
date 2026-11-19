@@ -1,6 +1,11 @@
 #[cfg(feature = "libc")]
 use std::os::unix::prelude::AsRawFd;
-use std::{collections::VecDeque, io, os::unix::net::UnixStream, time::Duration};
+use std::{
+    collections::VecDeque,
+    io,
+    os::unix::net::UnixStream,
+    time::{Duration, Instant},
+};
 
 #[cfg(not(feature = "libc"))]
 use rustix::fd::{AsFd, AsRawFd};
@@ -218,7 +223,18 @@ impl EventSource for UnixInternalEventSource {
 struct Parser {
     buffer: Vec<u8>,
     internal_events: VecDeque<InternalEvent>,
+    // An unterminated bracketed paste would otherwise absorb every later key.
+    paste_started: Option<Instant>,
+    paste_truncated: bool,
 }
+
+/// A paste whose closing marker has not arrived within this time is discarded;
+/// bytes that arrive afterwards are parsed as ordinary input.
+const PASTE_LIFETIME: Duration = Duration::from_secs(1);
+/// Larger pastes keep only the markers and produce no event.
+const PASTE_LIMIT: usize = 1 << 20;
+const PASTE_START: &[u8] = b"\x1B[200~";
+const PASTE_END: &[u8] = b"\x1B[201~";
 
 impl Default for Parser {
     fn default() -> Self {
@@ -240,33 +256,62 @@ impl Default for Parser {
             // method implementation, all events are consumed before the next TTY_BUFFER
             // is processed -> events pushed.
             internal_events: VecDeque::with_capacity(128),
+            paste_started: None,
+            paste_truncated: false,
         }
     }
 }
 
 impl Parser {
     fn advance(&mut self, buffer: &[u8], more: bool) {
+        self.advance_at(buffer, more, Instant::now());
+    }
+
+    fn advance_at(&mut self, buffer: &[u8], more: bool, now: Instant) {
         for (idx, byte) in buffer.iter().enumerate() {
             let more = idx + 1 < buffer.len() || more;
 
+            if self
+                .paste_started
+                .is_some_and(|started| now.saturating_duration_since(started) >= PASTE_LIFETIME)
+            {
+                self.reset();
+            }
             self.buffer.push(*byte);
 
             match parse_event(&self.buffer, more) {
                 Ok(Some(ie)) => {
-                    self.internal_events.push_back(ie);
-                    self.buffer.clear();
+                    if !self.paste_truncated {
+                        self.internal_events.push_back(ie);
+                    }
+                    self.reset();
                 }
                 Ok(None) => {
                     // Event can't be parsed, because we don't have enough bytes for
                     // the current sequence. Keep the buffer and process next bytes.
+                    if self.paste_started.is_none() && self.buffer.starts_with(PASTE_START) {
+                        self.paste_started = Some(now);
+                    }
+                    if self.paste_started.is_some() && self.buffer.len() > PASTE_LIMIT {
+                        // Keep enough of the tail to recognize the closing marker.
+                        let tail = self.buffer.len() - (PASTE_END.len() - 1);
+                        self.buffer.drain(PASTE_START.len()..tail);
+                        self.paste_truncated = true;
+                    }
                 }
                 Err(_) => {
                     // Event can't be parsed (not enough parameters, parameter is not a number, ...).
                     // Clear the buffer and continue with another sequence.
-                    self.buffer.clear();
+                    self.reset();
                 }
             }
         }
+    }
+
+    fn reset(&mut self) {
+        self.buffer.clear();
+        self.paste_started = None;
+        self.paste_truncated = false;
     }
 }
 
@@ -275,5 +320,50 @@ impl Iterator for Parser {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.internal_events.pop_front()
+    }
+}
+
+#[cfg(all(test, feature = "bracketed-paste"))]
+mod tests {
+    use super::*;
+    use crate::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+
+    fn events(parser: &mut Parser) -> Vec<InternalEvent> {
+        parser.collect()
+    }
+
+    #[test]
+    fn unterminated_paste_expires_without_replaying_its_payload() {
+        let mut parser = Parser::default();
+        let start = Instant::now();
+        parser.advance_at(b"\x1B[200~q\x03", false, start);
+        parser.advance_at(b"x", false, start + PASTE_LIFETIME / 2);
+        assert!(events(&mut parser).is_empty());
+        parser.advance_at(b"\x03", false, start + PASTE_LIFETIME);
+        assert_eq!(
+            events(&mut parser),
+            [InternalEvent::Event(Event::Key(KeyEvent::new(
+                KeyCode::Char('c'),
+                KeyModifiers::CONTROL
+            )))]
+        );
+        assert!(parser.buffer.is_empty() && parser.paste_started.is_none());
+    }
+
+    #[test]
+    fn oversized_paste_is_bounded_and_dropped_at_its_closing_marker() {
+        let mut parser = Parser::default();
+        let now = Instant::now();
+        parser.advance_at(PASTE_START, true, now);
+        for _ in 0..(PASTE_LIMIT / 1024 + 2) {
+            parser.advance_at(&[b'q'; 1024], true, now);
+            assert!(parser.buffer.len() <= PASTE_LIMIT + 1);
+        }
+        parser.advance_at(PASTE_END, true, now);
+        parser.advance_at(b"\x1B[200~kept\x1B[201~", false, now);
+        assert_eq!(
+            events(&mut parser),
+            [InternalEvent::Event(Event::Paste("kept".into()))]
+        );
     }
 }

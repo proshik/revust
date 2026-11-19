@@ -13,16 +13,17 @@ ambiguous acknowledgements, same-key retry, duplicate delivery, honest results,
 owned cleanup and metadata-only helpers, including explicit roots and a
 disposable Git linked worktree. They never control active applications.
 
-public_tui_checks.py uses local providers and disposable controlling PTYs for 23
-review/archive/filter/resize/signal/input-loss/countdown/terminal-text scenarios. Failed, stopped
-and policy-failed runs each cover timed closing, zero delay and any-key retention;
-quitting saved views with terminal stdout suppresses duplicate JSON/Markdown,
-redirected output is preserved, and saved incomplete views retain exit 2 and leave archive bytes unchanged.
-Saved diagnostics and Markdown reach a terminal as inert text and redirected
-streams unchanged. Run
-terminal_session_checks.py with the built terminal_probe example for direct mode
-restoration/failure/navigation coverage, and input_disconnect_checks.py for the
-bounded EOF/CPU probe. PTY access may require a suitable local execution context.
+public_tui_checks.py uses local providers and disposable controlling PTYs for 24
+review/archive/filter/resize/signal/input-loss/unterminated-paste/countdown/
+terminal-text scenarios. Failed, stopped and policy-failed runs each cover timed
+closing, zero delay and any-key retention; quitting saved views with terminal
+stdout suppresses duplicate JSON/Markdown, redirected output is preserved, and
+saved incomplete views retain exit 2 and leave archive bytes unchanged. Saved
+diagnostics and Markdown reach a terminal as inert text and redirected streams
+unchanged. Run terminal_session_checks.py with the built terminal_probe example
+for direct mode restoration/failure/navigation coverage, and
+input_disconnect_checks.py for the bounded EOF/CPU probe. PTY access may require
+a suitable local execution context.
 
 claude_cli_checks.py, codex_cli_checks.py, opencode_cli_checks.py and
 opencode_checks.py are optional installed-CLI loopback harnesses with explicit

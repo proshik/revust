@@ -8,8 +8,9 @@ The product is MIT licensed. Applicable third-party notices are retained in
 - Process supervision adapts Guild Rust process code under its declared MIT
   terms. Source identity and terms are retained in `third_party/guild/NOTICE`
   and `LICENSE`.
-- Vendored Crossterm 0.29.0 retains its MIT notices. The local terminal input-loss
-  patch is `third_party/crossterm/revust-pty.patch`.
+- Vendored Crossterm 0.29.0 retains its MIT notices. The local patch for terminal
+  input loss and unterminated bracketed pastes is
+  `third_party/crossterm/revust-pty.patch`.
 - Cargo dependencies retain their declared licences. Native packages include
   available licence/notice files and an index under `third_party/cargo/`.
 - Native packages include Rust library copyright and MIT/Apache texts under

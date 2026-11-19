@@ -211,16 +211,21 @@ def main():
         # Interrupt a genuinely running owned subprocess and check its PID is gone.
         provider.write_text('#!/bin/sh\nprintf "%s" $$ > provider.pid\nexec /bin/sleep 60\n'); provider.chmod(0o700)
         (profiles / 'test.md').write_text('---\nmodel: claude/sonnet\nagents:\n  - name: a\n    lenses: [bugs]\n---\nReview {{SCOPE}}\n')
-        for run, external_signal in [('02', None), ('03', signal.SIGTERM), ('05', signal.SIGHUP), ('07', signal.SIGINT), ('08', signal.SIGTERM)]:
+        for run, external_signal in [('02', None), ('03', signal.SIGTERM), ('05', signal.SIGHUP), ('07', signal.SIGINT), ('08', signal.SIGTERM), ('09', None)]:
             other = root / f'tasks/test/{run}/input'; other.mkdir(parents=True); (other / 'scope.md').write_text('scope')
             (root / 'provider.pid').unlink(missing_ok=True)
-            def interrupt(until, send, _resize, _remain):
+            def interrupt(until, send, _resize, remain):
                 deadline = time.monotonic() + 10
                 while not (root / 'provider.pid').exists():
                     assert time.monotonic() < deadline
                     time.sleep(.02)
                 if run == '08':
                     send(b'\x1b[', wait_consumed=True)  # unfinished CSI must not block a second read
+                if run == '09':
+                    # A paste opener without its closing marker expires; its payload
+                    # is discarded rather than replayed as a command.
+                    send(b'\x1b[200~\x03', wait_consumed=True)
+                    remain(1.5)
                 if external_signal: os.kill(int((root / 'revust.pid').read_text()), external_signal)
                 else: send(b'\x03')
             interrupted = session(root, [a.replace('--run=01', f'--run={run}') for a in args], interrupt)
@@ -245,7 +250,7 @@ def main():
         assert result['code'] == 1 and time.monotonic() - started >= .9, result
         incomplete_countdown(root, provider, answer, args)
         terminal_text(root)
-    print('Twenty-three public PTY scenarios passed: fourteen review/archive/cancellation/terminal-text cases and nine failed/stopped/policy-failed countdown cases')
+    print('Twenty-four public PTY scenarios passed: fifteen review/archive/cancellation/terminal-text cases and nine failed/stopped/policy-failed countdown cases')
 
 def incomplete_countdown(root, provider, answer, args):
     for kind in ['failed', 'stopped', 'policy-failed']:
