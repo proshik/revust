@@ -37,7 +37,7 @@ class Revust < Formula
   end
 
   test do
-    assert_match "revust 0.1.0", shell_output("#{bin}/revust --version")
+    assert_match "revust #{version}", shell_output("#{bin}/revust --version")
     (testpath/"home").mkpath
     ENV["HOME"] = (testpath/"home").to_s
     output = shell_output("#{bin}/revust config --runtime-only")
