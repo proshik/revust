@@ -294,6 +294,7 @@ pub fn run(
                 )
             },
             std::thread::Builder::new,
+            || control.check_running().is_none(),
         );
         for unit in verified {
             if let Some(output) = output(&unit) {
@@ -462,13 +463,15 @@ fn execute(
 }
 
 /// Run `work` over a shared queue with at most `width` native threads, the
-/// caller included, and return results in item order. A refused spawn only
-/// narrows the pool: the remaining workers drain the queue.
+/// caller included, and return results in item order. A refused spawn, or a
+/// run that stops while helpers start, only narrows the pool: the remaining
+/// workers drain the queue.
 fn pool<T: Sync, R: Send>(
     width: usize,
     items: &[T],
     work: impl Fn(&T) -> R + Sync,
     builder: impl Fn() -> std::thread::Builder,
+    running: impl Fn() -> bool,
 ) -> Vec<R> {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let next = AtomicUsize::new(0);
@@ -484,7 +487,11 @@ fn pool<T: Sync, R: Send>(
     };
     let mut finished = std::thread::scope(|scope| {
         let helpers: Vec<_> = (1..width.min(items.len()))
-            .map_while(|_| builder().spawn_scoped(scope, drain).ok())
+            .map_while(|_| {
+                running()
+                    .then(|| builder().spawn_scoped(scope, drain).ok())
+                    .flatten()
+            })
             .collect();
         let mut finished = drain();
         for helper in helpers {
@@ -555,6 +562,7 @@ mod tests {
                     refused()
                 }
             },
+            || true,
         );
         let threads = threads.lock().unwrap().len();
         (results, attempts.into_inner(), threads)
@@ -577,5 +585,38 @@ mod tests {
             assert_eq!(attempts, admit + 1, "spawning stops at the first refusal");
             assert!(threads <= admit + 1);
         }
+    }
+    #[test]
+    fn a_run_stopped_while_helpers_start_creates_no_further_helpers() {
+        // The first helper's item stops the run; the next spawn check sees it.
+        let stopped = std::sync::atomic::AtomicBool::new(false);
+        let checks = AtomicUsize::new(0);
+        let attempts = AtomicUsize::new(0);
+        let items = (0..9).collect::<Vec<_>>();
+        let results = pool(
+            4,
+            &items,
+            |n| {
+                stopped.store(true, Ordering::SeqCst);
+                n * 10
+            },
+            || {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                Builder::new()
+            },
+            || {
+                if checks.fetch_add(1, Ordering::SeqCst) > 0 {
+                    let started = std::time::Instant::now();
+                    while !stopped.load(Ordering::SeqCst) {
+                        assert!(started.elapsed().as_secs() < 10, "helper never ran");
+                        std::thread::yield_now();
+                    }
+                }
+                !stopped.load(Ordering::SeqCst)
+            },
+        );
+        assert_eq!(results, (0..9).map(|n| n * 10).collect::<Vec<_>>());
+        assert_eq!(attempts.into_inner(), 1, "no helper after the stop");
+        assert_eq!(checks.into_inner(), 2, "spawning stops at the first stop");
     }
 }

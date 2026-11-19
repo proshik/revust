@@ -28,7 +28,8 @@ stages/retries. Waiting for a slot consumes no call. Verification groups queue
 behind a worker pool, the calling thread included, whose width is fixed when the
 stage starts: the global and verify ceilings and the calls left. With no calls
 left, or a run already stopped, the caller alone records each group's stopped
-outcome without dispatching. A nonpositive legacy `--max-parallel` removes the
+outcome without dispatching; a run that stops while the pool starts creates no
+further threads. A nonpositive legacy `--max-parallel` removes the
 global ceiling and, unless a stage override applies, the verify one, so with an
 unlimited call budget the pool may have one thread per group. A refused thread
 narrows the pool instead of aborting the run. Whole-run deadlines include
