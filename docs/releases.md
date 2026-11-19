@@ -48,12 +48,15 @@ SHA256. Audit interpreter/runtime dependency discovery with a minimal PATH;
 do not assume the developer's Python installation exists on a clean machine.
 Preserve the full package in `libexec` and expose the executable through `bin`.
 Bind interpreter paths to the declared dependency during installation, retain
-the original package sums and regenerate installed-file sums. Keep package
+the original package sums and regenerate installed-file sums. Do both in the
+staged package and replace any existing `libexec`, so installing over a
+leftover keg gives the same result as a clean install. Keep package
 README/license/changelog in `libexec` as well as Homebrew's prefix metadata.
 
 Before publication, run style/audit, a meaningful `brew test` and disposable
 installation from the exact candidate archive. Exercise reinstall, upgrade,
-rollback and removal while checking user-owned files stay intact. After
+rollback, an upgrade onto a leftover keg of the same version and removal
+while checking user-owned files stay intact. After
 publication, repeat installation using the anonymous public download URL and
 documented `brew install proshik/tap/revust` command.
 

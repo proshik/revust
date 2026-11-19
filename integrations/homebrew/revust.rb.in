@@ -14,25 +14,26 @@ class Revust < Formula
   depends_on "python@3.14"
 
   def install
-    # Keep helpers, build receipt, documentation and all licence notices together.
-    libexec.install Pathname.pwd.children
-    # Supplying prefix metadata prevents Homebrew from moving it out of libexec.
-    cp [libexec/"README.md", libexec/"LICENSE", libexec/"CHANGELOG.md"], prefix
+    # Bind helpers to the declared interpreter while the package is still pristine.
     python = formula_opt_bin("python@3.14")/"python3.14"
     %w[launch-revust.sh guild-run.sh preflight.sh task-state.sh].each do |name|
-      inreplace libexec/"scripts"/name, "python3", python.to_s
+      inreplace "scripts/#{name}", "python3", python.to_s
     end
-    libexec.glob("scripts/*.py").each do |script|
+    Pathname.glob("scripts/*.py").each do |script|
       next unless script.read.start_with?("#!/usr/bin/env python3\n")
 
       inreplace script, "#!/usr/bin/env python3", "#!#{python}"
     end
     # Homebrew binds script interpreters; retain download sums and record installed sums.
-    mv libexec/"SHA256SUMS", libexec/"SOURCE_SHA256SUMS"
-    files = Dir.glob("#{libexec}/**/*", File::FNM_DOTMATCH).select { |file| File.file?(file) }.sort
-    (libexec/"SHA256SUMS").write files.map { |file|
-      "#{Digest::SHA256.file(file).hexdigest}  #{Pathname(file).relative_path_from(libexec)}\n"
-    }.join
+    mv "SHA256SUMS", "SOURCE_SHA256SUMS"
+    files = Dir.glob("**/*", File::FNM_DOTMATCH).select { |file| File.file?(file) }.sort
+    File.write "SHA256SUMS", files.map { |file| "#{Digest::SHA256.file(file).hexdigest}  #{file}\n" }.join
+    # An install over an existing keg must replace the package, not merge into it.
+    rm_r libexec if libexec.exist?
+    # Keep helpers, build receipt, documentation and all licence notices together.
+    libexec.install Pathname.pwd.children
+    # Supplying prefix metadata prevents Homebrew from moving it out of libexec.
+    cp [libexec/"README.md", libexec/"LICENSE", libexec/"CHANGELOG.md"], prefix
     bin.install_symlink libexec/"bin/revust"
   end
 
@@ -56,6 +57,11 @@ class Revust < Formula
     assert_match "revust-contract-v1", plan
     system "/bin/bash", libexec/"scripts/task-state.sh", "example"
     system libexec/"scripts/analyze-corpus.py", "--json"
+    python = formula_opt_bin("python@3.14")/"python3.14"
+    assert_predicate python, :executable?
+    libexec.glob("scripts/*.sh").each do |helper|
+      assert_empty helper.read.scan(/[^\s"']*python3[^\s"']*/).uniq - [python.to_s], helper.to_s
+    end
 
     (testpath/"saved").mkpath
     (testpath/"saved/findings.json").write <<~JSON
