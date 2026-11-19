@@ -594,17 +594,29 @@ fn path_lookup_skips_non_executable_files_and_directories() {
         fs::set_permissions(plain.join("opencode"), fs::Permissions::from_mode(0o600)).unwrap();
         fs::create_dir(directory.join("opencode")).unwrap();
         fs::rename(script(&stub, response()), stub.join("opencode")).unwrap();
+        // An executable FIFO is not a regular file either.
+        let fifo = tmp.0.join("fifo");
+        fs::create_dir(&fifo).unwrap();
+        nix::unistd::mkfifo(&fifo.join("opencode"), nix::sys::stat::Mode::S_IRWXU).unwrap();
+        // Like `which`, an empty or unset PATH finds nothing, not the
+        // launch directory's executable.
         for (mode, path) in [
-            ("selects", vec![&plain, &directory, &stub]),
-            ("missing", vec![&plain, &directory]),
+            ("selects", Some(vec![&plain, &directory, &fifo, &stub])),
+            ("missing", Some(vec![&plain, &directory, &fifo])),
+            ("missing", Some(vec![])),
+            ("missing", None),
         ] {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
                 .args(["--exact", NAME])
+                .current_dir(&stub)
                 .env("REVUST_LOOKUP_PROBE", &tmp.0)
-                .env("REVUST_LOOKUP_MODE", mode)
-                .env("PATH", std::env::join_paths(path).unwrap())
-                .output()
-                .unwrap();
+                .env("REVUST_LOOKUP_MODE", mode);
+            match path {
+                Some(path) => command.env("PATH", std::env::join_paths(path).unwrap()),
+                None => command.env_remove("PATH"),
+            };
+            let output = command.output().unwrap();
             assert!(
                 output.status.success(),
                 "{mode}: {}",

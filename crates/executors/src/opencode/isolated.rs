@@ -337,12 +337,17 @@ fn supported_version(output: &str) -> bool {
 
 // A bare name follows the PATH rule of `which` and exec: skip entries that are
 // not regular files executable by the current user. Explicit paths are probed.
+// An empty or unset PATH finds nothing rather than searching the launch directory.
 fn executable(program: &str) -> io::Result<String> {
     use nix::unistd::{AccessFlags, access};
     let path = if program.contains('/') {
         PathBuf::from(program)
     } else {
-        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        let search = std::env::var_os("PATH").unwrap_or_default();
+        (!search.is_empty())
+            .then(|| std::env::split_paths(&search))
+            .into_iter()
+            .flatten()
             .map(|p| p.join(program))
             .find(|p| p.is_file() && access(p, AccessFlags::X_OK).is_ok())
             .ok_or_else(|| {
