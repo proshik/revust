@@ -6,6 +6,7 @@ import shutil
 import stat
 import subprocess
 import sys
+sys.dont_write_bytecode = True  # Read-only: importing the local helper must not write its cache.
 from helper_common import HelperError, configuration, executable, safe, open_readonly
 
 

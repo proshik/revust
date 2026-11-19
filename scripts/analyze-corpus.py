@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import stat
 import sys
+sys.dont_write_bytecode = True  # Read-only: importing the local helper must not write its cache.
 from helper_common import HelperError, configuration, safe, open_readonly
 
 CATEGORIES = ('findings', 'open_questions', 'pre_existing', 'immaterial')

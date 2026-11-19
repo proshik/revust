@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -193,6 +194,23 @@ print((root/'effective.json').read_text())
             result=self.invoke('task-state.sh',task)
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn('exists: false\nrounds: none',result.stdout,task)
+
+    def test_read_only_helpers_do_not_write_bytecode_into_their_installation(self):
+        installed=self.root/'installed/scripts';installed.mkdir(parents=True)
+        names=sorted(['helper_common.py','inspect-config.py','analyze-corpus.py','preflight.sh','task-state.sh'])
+        for name in names:
+            shutil.copy2(ROOT/'scripts'/name,installed/name)
+        self.config.write_text(json.dumps(self.value))
+        # An explicit cache prefix makes local-module caching observable on every
+        # Python build, including ones that cache outside the source tree by default.
+        prefix=self.root/'bytecode cache'
+        for command in [['/bin/bash',installed/'preflight.sh'],['/bin/bash',installed/'task-state.sh','task'],
+                        [sys.executable,installed/'analyze-corpus.py','--json']]:
+            result=subprocess.run(list(map(str,command)),cwd=self.root,env={**self.environment,'PYTHONPYCACHEPREFIX':str(prefix)},
+                                  capture_output=True,text=True,timeout=15)
+            self.assertEqual(result.returncode,0,(command,result.stderr))
+            self.assertEqual(sorted(path.name for path in installed.iterdir()),names,command)
+            self.assertEqual([path for path in prefix.rglob('helper_common*')],[],command)
 
     def git(self, *arguments, cwd):
         subprocess.run(['git','-c','user.name=fixture','-c','user.email=fixture@example.invalid',*arguments],cwd=cwd,
