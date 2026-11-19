@@ -123,12 +123,17 @@ fn initialization_preserves_assignments_and_raw_profile_bytes_before_export() {
             .iter()
             .all(|file| !file.created)
     );
-    fs::write(&config, b"# template = comment\n; comment\n[section]\n").unwrap();
-    initialize(&project, Some(&home), &Invocation::default()).unwrap();
-    assert_eq!(
-        fs::read(&config).unwrap(),
-        include_bytes!("../templates/config")
-    );
+    for template in [
+        &b"# template = comment\n\n; comment\r\n  \n[section]\n"[..],
+        b"",
+    ] {
+        fs::write(&config, template).unwrap();
+        initialize(&project, Some(&home), &Invocation::default()).unwrap();
+        assert_eq!(
+            fs::read(&config).unwrap(),
+            include_bytes!("../templates/config")
+        );
+    }
 }
 
 #[test]
@@ -157,6 +162,7 @@ fn initialization_preserves_configuration_text_without_assignments() {
         b"# settings\n[Application Options\n",
         b"[Application Options] max-parallel 4 [draft]\n",
         b"[   ]\n",
+        b"# settings\rmax-parallel = 4\r",
     ] {
         fs::write(&config, authored).unwrap();
         // The CLI validates runtime settings before init; these files pass.

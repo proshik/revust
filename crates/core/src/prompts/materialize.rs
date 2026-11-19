@@ -72,9 +72,10 @@ pub fn initialize(
 
 /// Only blank lines, comments and `[name]` section headers may be refreshed.
 /// Any other text is authored content, even when the INI reader ignores it.
+/// A bare carriage return also ends a line so it cannot hide text in a comment.
 fn is_template(bytes: &[u8]) -> bool {
     std::str::from_utf8(bytes).is_ok_and(|source| {
-        source.lines().map(str::trim).all(|line| {
+        source.split(['\n', '\r']).map(str::trim).all(|line| {
             let header = line
                 .strip_prefix('[')
                 .and_then(|rest| rest.strip_suffix(']'));

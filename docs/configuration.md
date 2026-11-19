@@ -9,8 +9,10 @@ implemented.
 INI files named config merge per field: defaults, user, project, invocation.
 The first assignment in a winning file is used, repeated invocation values use
 the last. Unknown keys and malformed assignments in an active assignment file are
-errors even when masked. A file without assignments sets nothing; init refreshes
-it only when it holds just blank lines, comments and section headers.
+errors even when masked. Config files must be valid UTF-8; a decoding error is
+reported before init writes anything. A file without assignments sets
+nothing; init refreshes it only when it holds just blank lines, comments and
+section headers.
 Hyphenated CLI names and documented CamelCase INI aliases are accepted.
 
 | Setting | Default |
