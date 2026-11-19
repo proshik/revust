@@ -74,6 +74,19 @@ print((root/'effective.json').read_text())
         self.assertEqual(result.returncode,1)
         self.assertIn('MISSING',result.stdout)
 
+    def test_preflight_selects_only_regular_files_as_revust_launches_them(self):
+        fifo=self.root/'fifo';fifo.mkdir()
+        os.mkfifo(fifo/'opencode',0o700)
+        later=self.root/'later';later.mkdir()
+        self.value['policy']['values']['executors']['opencode']['executable']='opencode'
+        result=self.invoke('preflight.sh','--lenses',PATH=os.pathsep.join([str(fifo),'/usr/bin','/bin']))
+        self.assertEqual(result.returncode,1,result.stderr)
+        self.assertIn('opencode: MISSING',result.stdout)
+        shutil.copy2(self.provider,later/'opencode')
+        result=self.invoke('preflight.sh','--lenses',PATH=os.pathsep.join([str(fifo),str(later),'/usr/bin','/bin']))
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('opencode: '+str(later/'opencode'),result.stdout)
+
     def test_current_cli_catalog_drives_preflight_without_provider_execution(self):
         profile=self.root/'.revust/prompts/profiles/fixture.md'
         profile.parent.mkdir(parents=True)

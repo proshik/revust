@@ -2,7 +2,6 @@
 """Render selected invocation readiness and saved task inventory without execution."""
 import os
 from pathlib import Path
-import shutil
 import stat
 import subprocess
 import sys
@@ -58,13 +57,23 @@ def preflight(arguments):
         missing = False
         for name in sorted(names):
             program = policy.get('executors', {}).get(name, {}).get('executable')
-            located = shutil.which(program) if isinstance(program, str) and program else None
+            located = regular_executable(program) if isinstance(program, str) and program else None
             print(safe(name) + ': ' + (safe(located) if located else 'MISSING - required by this invocation'))
             missing |= located is None
         print('ok: ' + str(not missing).lower())
         return int(missing)
     except (KeyError, TypeError, ValueError):
         raise HelperError('configuration does not describe the selected invocation')
+
+
+def regular_executable(program):
+    """shutil.which limited to regular files, as revust launches providers."""
+    if os.path.dirname(program):
+        candidates = [program]
+    else:
+        search = os.environ.get('PATH', '')
+        candidates = [os.path.join(directory, program) for directory in search.split(os.pathsep)] if search else []
+    return next((path for path in candidates if os.path.isfile(path) and os.access(path, os.X_OK)), None)
 
 
 def regular_size(path):

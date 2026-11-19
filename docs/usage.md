@@ -67,7 +67,9 @@ preflight.sh accepts an optional profile, a boolean --lenses readiness mode and
 --config-dir PATH; it does not accept other review CLI flags. task-state.sh
 requires one task ID and accepts --tasks-dir PATH and --config-dir PATH. Root
 options are passed to `revust config` in the given order. Both inspect the
-selected executable's configuration without provider calls. These helpers,
+selected executable's configuration without provider calls. preflight.sh
+reports a provider only when it resolves to a regular executable file, as
+revust launches it. These helpers,
 including a direct `python3 scripts/analyze-corpus.py`, never write bytecode for
 their shared Python module into the installation. task-state.sh follows a task
 alias only when the selected catalog lists it and its relative link stays inside
