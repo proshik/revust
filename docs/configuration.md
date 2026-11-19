@@ -12,7 +12,8 @@ the last. Unknown keys and malformed assignments in an active assignment file ar
 errors even when masked. Config files must be valid UTF-8; a decoding error is
 reported before init writes anything. A file without assignments sets
 nothing; init refreshes it only when it holds just blank lines, comments and
-section headers.
+section headers. Ignored lines and bare carriage returns are reported on stderr
+as warnings with file and line, never with the line text.
 Hyphenated CLI names and documented CamelCase INI aliases are accepted.
 
 | Setting | Default |

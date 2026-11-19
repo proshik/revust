@@ -60,6 +60,9 @@ pub struct RuntimePaths {
 pub struct RuntimeConfig {
     pub knobs: Vec<Knob>,
     pub paths: RuntimePaths,
+    /// Located notes about ignored INI text, outside the JSON contract.
+    #[serde(skip)]
+    pub warnings: Vec<String>,
 }
 
 enum Kind {
@@ -164,6 +167,7 @@ impl RuntimeConfig {
         let roots = paths::Layers::resolve(cwd, home, invocation.config_dir.as_deref())
             .map_err(|error| error.to_string())?;
         let mut assignments = Vec::new();
+        let mut warnings = Vec::new();
         // Reversing flags gives last occurrence precedence. Every flag is validated,
         // even if another occurrence will win; this also serves inspection commands.
         for (key, value) in invocation.overrides.iter().rev() {
@@ -183,7 +187,7 @@ impl RuntimeConfig {
             .chain(std::iter::once((&roots.user, Origin::User)));
         for (directory, origin) in directories {
             let path = directory.join("config");
-            for entry in ini::read(&path)? {
+            for entry in ini::read(&path, &mut warnings)? {
                 let field = definition_index(&entry.key, true).ok_or_else(|| {
                     format!(
                         "parse {}:{}: unknown option: {}",
@@ -272,6 +276,7 @@ impl RuntimeConfig {
                 profile_fallback,
                 profile_fallback_error,
             },
+            warnings,
         })
     }
 }

@@ -50,7 +50,7 @@ impl Catalog {
         home: Option<&Path>,
         invocation: &Invocation,
     ) -> Result<Self, String> {
-        let RuntimeConfig { knobs, paths } = RuntimeConfig::resolve(cwd, home, invocation)?;
+        let RuntimeConfig { knobs, paths, .. } = RuntimeConfig::resolve(cwd, home, invocation)?;
         let prompts = PromptSet::load(&Layers {
             user: paths.config_dir.clone(),
             project: paths.project_dir.clone(),

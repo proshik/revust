@@ -9,12 +9,18 @@ fn content(line: &str) -> Option<&str> {
     let text = line.trim();
     (!text.is_empty() && !text.starts_with(['#', ';'])).then_some(text)
 }
-pub fn read(path: &Path) -> Result<Vec<Entry>, String> {
+/// Ignored text is reported through `warnings` by location only, never quoted.
+pub fn read(path: &Path, warnings: &mut Vec<String>) -> Result<Vec<Entry>, String> {
     let source = match fs::read_to_string(path) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(format!("read {}: {error}", path.display())),
         Ok(source) => source,
     };
+    warnings.extend(
+        ignored(&source)
+            .into_iter()
+            .map(|(line, detail)| format!("parse {}:{line}: {detail}", path.display())),
+    );
     // Files without assignments are not active settings. init refreshes only
     // the comment/header-only ones and preserves any other text.
     if !source
@@ -59,6 +65,34 @@ pub fn read(path: &Path) -> Result<Vec<Entry>, String> {
         })
         .filter_map(Result::transpose)
         .collect()
+}
+
+/// Text the reader skips without an error: lines that are neither comments,
+/// `[name]` headers nor assignments, and carriage returns not followed by a
+/// line feed (only LF and CRLF end a line, so such text joins its line).
+fn ignored(source: &str) -> Vec<(usize, &'static str)> {
+    let mut returns: Vec<_> = source
+        .match_indices('\r')
+        .filter(|(offset, _)| source.as_bytes().get(offset + 1) != Some(&b'\n'))
+        .map(|(offset, _)| source[..offset].matches('\n').count() + 1)
+        .collect();
+    returns.dedup();
+    let mut found: Vec<_> = returns
+        .into_iter()
+        .map(|line| (line, "bare carriage return does not end the line"))
+        .collect();
+    found.extend(source.lines().enumerate().filter_map(|(index, text)| {
+        let text = content(text)?;
+        let header = text
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+            .is_some_and(|name| !name.trim().is_empty() && !name.contains(['[', ']']));
+        let assignment = !text.starts_with('[') && text.contains('=');
+        (!header && !assignment)
+            .then_some((index + 1, "ignored line that is not a key=value assignment"))
+    }));
+    found.sort_by_key(|(line, _)| *line);
+    found
 }
 
 /// Decode escape units into bytes, then apply the public lossy UTF-8 boundary.

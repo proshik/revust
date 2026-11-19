@@ -148,6 +148,17 @@ fn run() -> Result<(), String> {
     }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+    // Every remaining command except the schema export reads the INI layers.
+    // Report ignored text once, before any terminal view takes over; errors
+    // are left to the command's own resolution.
+    if !extension_schema
+        && let Ok(runtime) = RuntimeConfig::resolve(&cwd, home.as_deref(), &invocation)
+    {
+        let mut stderr = io::stderr().lock();
+        for warning in &runtime.warnings {
+            let _ = writeln!(stderr, "warning: {warning}");
+        }
+    }
     if version {
         RuntimeConfig::resolve(&cwd, home.as_deref(), &invocation)?;
         return writeln!(io::stdout().lock(), "revust {}", env!("CARGO_PKG_VERSION"))

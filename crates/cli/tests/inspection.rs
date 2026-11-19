@@ -99,6 +99,59 @@ fn explicit_config_root_and_split_flags_work_without_home_or_providers() {
 }
 
 #[test]
+fn ignored_ini_text_warns_on_stderr_without_changing_values_or_stdout() {
+    const NO_ASSIGNMENT: &str = "ignored line that is not a key=value assignment";
+    const BARE_CR: &str = "bare carriage return does not end the line";
+    let tree = Tree::new();
+    let user = tree.0.join("user");
+    fs::create_dir_all(&user).unwrap();
+    fs::create_dir_all(tree.0.join(".revust")).unwrap();
+    // An active CRLF file with a valid assignment stays silent.
+    fs::write(user.join("config"), "# note\r\nidle-timeout = 90s\r\n\r\n").unwrap();
+    let project = tree.0.join(".revust/config");
+    for (source, expected) in [
+        (
+            "# comment\n; comment\n\n[Application Options]\nmax-parallel 7\n[draft = 1\n",
+            vec![(5, NO_ASSIGNMENT), (6, NO_ASSIGNMENT)],
+        ),
+        ("# settings\rmax-parallel = 7\r", vec![(1, BARE_CR)]),
+        ("# a\r\n[Application Options]\r\n\r\n; b\r\n", vec![]),
+    ] {
+        fs::write(&project, source).unwrap();
+        let result = Command::new(env!("CARGO_BIN_EXE_revust"))
+            .current_dir(&tree.0)
+            .args(["--config-dir", user.to_str().unwrap()])
+            .args(["config", "--runtime-only"])
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{source:?}");
+        let warnings: Vec<_> = expected
+            .iter()
+            .map(|(line, detail)| {
+                format!("warning: parse {}:{line}: {detail}\n", project.display())
+            })
+            .collect();
+        assert_eq!(String::from_utf8(result.stderr).unwrap(), warnings.concat());
+        // The JSON contract and the applied values are unchanged.
+        let output: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+        let knob = |name: &str| {
+            output["knobs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|k| k["name"] == name)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(knob("max-parallel")["value"], 4);
+        assert_eq!(knob("max-parallel")["source"], "default");
+        assert_eq!(knob("idle-timeout")["value"], "1m30s");
+        assert_eq!(knob("idle-timeout")["source"], "user");
+    }
+}
+
+#[test]
 fn help_explains_the_available_read_only_surface() {
     let tree = Tree::new();
     let result = Command::new(env!("CARGO_BIN_EXE_revust"))
