@@ -46,10 +46,10 @@ print((root/'effective.json').read_text())
                       'paths': {'tasks_dir':str(self.tasks),'tasks':[]}}
         self.environment = {'PATH':'/usr/bin:/bin','REVUST_BIN':str(self.program), 'FIXTURE':str(self.root), 'HOME':str(self.root)}
 
-    def invoke(self, helper, *arguments, **environment):
+    def invoke(self, helper, *arguments, cwd=None, **environment):
         self.config.write_text(json.dumps(self.value))
         command = [sys.executable, '-B', str(ROOT / 'scripts' / helper)] if helper.endswith('.py') else ['/bin/bash',str(ROOT/'scripts'/helper)]
-        result = subprocess.run([*command,*map(str,arguments)],cwd=self.root,env={**self.environment,**environment},capture_output=True,text=True,timeout=15)
+        result = subprocess.run([*command,*map(str,arguments)],cwd=cwd or self.root,env={**self.environment,**environment},capture_output=True,text=True,timeout=15)
         self.assertFalse((self.root/'provider-called').exists())
         self.assertNotIn('synthetic-do-not-print',result.stdout+result.stderr)
         return result
@@ -113,6 +113,89 @@ print((root/'effective.json').read_text())
         self.assertEqual(hashes(self.tasks),before)
         for task in ('../outside','a/b','a\\b','.hidden','a..b'):
             self.assertEqual(self.invoke('task-state.sh',task).returncode,1)
+
+    def calls(self):
+        return [json.loads(line) for line in (self.root/'cli-calls').read_text().splitlines()]
+
+    def test_explicit_roots_are_forwarded_to_config_in_given_order(self):
+        result=self.invoke('task-state.sh','--tasks-dir',self.tasks,'--config-dir=alt config','task')
+        self.assertEqual(result.returncode,0,result.stderr)
+        result=self.invoke('task-state.sh','--config-dir','alt config','task','--tasks-dir='+str(self.tasks))
+        self.assertEqual(result.returncode,0,result.stderr)
+        result=self.invoke('preflight.sh','--config-dir','alt config','mixed','--lenses')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(self.calls(),[['config','--tasks-dir='+str(self.tasks),'--config-dir=alt config'],
+                                       ['config','--config-dir=alt config','--tasks-dir='+str(self.tasks)],
+                                       ['config','--effective','--config-dir=alt config','--profile','mixed']])
+
+    def test_explicit_root_options_reject_unusable_forms_before_config(self):
+        for helper,arguments in [('task-state.sh',('--tasks-dir=','task')),('task-state.sh',('task','--tasks-dir')),
+                                 ('task-state.sh',('--config-dir','--tasks-dir','x','task')),
+                                 ('task-state.sh',('--tasks-dir','a','--tasks-dir','b','task')),
+                                 ('task-state.sh',('--workdir','x','task')),('task-state.sh',('--tasks-dir','x')),
+                                 ('preflight.sh',('--config-dir=',)),('preflight.sh',('--tasks-dir','x')),
+                                 ('preflight.sh',('--config-dir',))]:
+            result=self.invoke(helper,*arguments)
+            self.assertEqual(result.returncode,1,(helper,arguments,result.stdout))
+            self.assertIn('usage: '+helper,result.stderr)
+        self.assertFalse((self.root/'cli-calls').exists())
+
+    def test_task_state_sees_tasks_under_explicit_tasks_and_config_roots(self):
+        cli=str(ROOT/'target/debug/revust')
+        alternate=self.root/'elsewhere/tasks';(alternate/'task/01/input').mkdir(parents=True)
+        (alternate/'task/01/input/scope.md').write_text('scope')
+        default=self.invoke('task-state.sh','task',REVUST_BIN=cli)
+        self.assertIn('exists: false',default.stdout)
+        explicit=self.invoke('task-state.sh','--tasks-dir',alternate,'task',REVUST_BIN=cli)
+        self.assertEqual(explicit.returncode,0,explicit.stderr)
+        self.assertIn('exists: true',explicit.stdout)
+        self.assertIn('round: 01 prepared scope=present',explicit.stdout)
+        selected=self.root/'selected config';selected.mkdir()
+        (selected/'config').write_text('tasks-dir = '+str(alternate)+'\n')
+        configured=self.invoke('task-state.sh','--config-dir',selected,'task',REVUST_BIN=cli)
+        self.assertEqual(configured.returncode,0,configured.stderr)
+        self.assertIn('tasks_dir: '+str(alternate),configured.stdout)
+        self.assertIn('exists: true',configured.stdout)
+
+    def test_preflight_finds_profile_defined_only_in_explicit_config_root(self):
+        cli=str(ROOT/'target/debug/revust')
+        selected=self.root/'selected config'
+        profile=selected/'prompts/profiles/only-here.md';profile.parent.mkdir(parents=True)
+        profile.write_text('---\nmodel: claude/fixture\nagents:\n  - name: finder\n    lenses: [bugs]\n---\nInspect {{SCOPE}}\n')
+        (selected/'extensions.json').write_text(json.dumps({'version':1,'policy':{
+            'stages':{'synthesis':{'enabled':False},'verify':{'enabled':False}},
+            'executors':{'claude':{'executable':str(self.provider)}}}}))
+        self.assertEqual(self.invoke('preflight.sh','only-here',REVUST_BIN=cli).returncode,1)
+        result=self.invoke('preflight.sh','--config-dir',selected,'only-here',REVUST_BIN=cli)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('profile: only-here',result.stdout)
+        self.assertIn('claude: '+str(self.provider).replace('\n','?'),result.stdout)
+        self.assertIn('ok: true',result.stdout)
+
+    def git(self, *arguments, cwd):
+        subprocess.run(['git','-c','user.name=fixture','-c','user.email=fixture@example.invalid',*arguments],cwd=cwd,
+                       env={**self.environment,'GIT_CONFIG_NOSYSTEM':'1'},check=True,capture_output=True,timeout=15)
+
+    def test_task_state_reports_archive_inside_linked_worktree(self):
+        main=self.root/'repository';main.mkdir()
+        self.git('init','-q',cwd=main)
+        self.git('commit','-q','--allow-empty','-m','fixture',cwd=main)
+        worktree=self.root/'linked';self.git('worktree','add','-q',str(worktree),cwd=main)
+        sibling=self.root/'linked-archive';sibling.mkdir()
+        alias=self.root/'linked alias';alias.symlink_to(worktree,target_is_directory=True)
+        marker='archive_in_worktree:'
+        cases=[(worktree,worktree/'.revust/tasks',True),(alias,alias/'.revust/not yet/tasks',True),
+               (alias,worktree,True),(worktree,self.tasks,False),(worktree,sibling,False),
+               (main,main/'.revust/tasks',False),(self.root,self.tasks,False)]
+        for cwd,tasks,inside in cases:
+            self.value['paths']['tasks_dir']=str(tasks)
+            result=self.invoke('task-state.sh','task',cwd=cwd)
+            self.assertEqual(result.returncode,0,result.stderr)
+            lines=[line for line in result.stdout.splitlines() if line.startswith(marker)]
+            if inside:
+                self.assertEqual(lines,[marker+' true (removed with worktree '+str(worktree.resolve())+')'],(cwd,tasks))
+            else:
+                self.assertEqual(lines,[],(cwd,tasks))
 
     def test_corpus_categories_missing_stages_unknowns_and_read_only_evidence(self):
         before={'findings':[{'id':'a','severity':'major','lenses':['bugs'],'sources':['one']}, {'id':'b','severity':'minor','lenses':['docs','bugs'],'sources':['one','two']} ]}

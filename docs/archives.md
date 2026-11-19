@@ -61,7 +61,8 @@ usage is accounted separately where observed.
 
 `stats [--task NAME]` lists observed stages and qualified skipped inputs.
 `scripts/analyze-corpus.py` is read-only metadata analysis; `scripts/task-state.sh`
-shows configured task state. Both honor the selected executable and caller cwd.
+shows configured task state. Both honor the selected executable, caller cwd and
+explicit --tasks-dir.
 `cleanup --task NAME` refuses active/ambiguous locks and confines deletion to its
 owned selected root. It may leave partial deletion on I/O failure and does not
 serialize against every possible future review start. Never run it on user data

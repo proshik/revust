@@ -63,6 +63,10 @@ REVUST_BIN=/absolute/path/to/revust scripts/task-state.sh example
 REVUST_BIN=/absolute/path/to/revust python3 scripts/analyze-corpus.py --json
 ```
 
-preflight.sh accepts an optional profile and a boolean --lenses readiness mode;
-it does not accept review CLI flags. task-state.sh requires one task ID. Both
-inspect the selected executable's effective configuration without provider calls.
+preflight.sh accepts an optional profile, a boolean --lenses readiness mode and
+--config-dir PATH; it does not accept other review CLI flags. task-state.sh
+requires one task ID and accepts --tasks-dir PATH and --config-dir PATH. Root
+options are passed to `revust config` in the given order. Both inspect the
+selected executable's configuration without provider calls. task-state.sh prints
+`archive_in_worktree` when the caller is in a linked Git worktree and the
+physical tasks root is inside it: removing that worktree deletes the archive.

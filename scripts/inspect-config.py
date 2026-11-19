@@ -4,17 +4,45 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import subprocess
 import sys
 from helper_common import HelperError, configuration, executable, safe, open_readonly
 
 
+PREFLIGHT_USAGE = 'usage: preflight.sh [--config-dir PATH] [PROFILE] [--lenses]'
+TASK_USAGE = 'usage: task-state.sh [--tasks-dir PATH] [--config-dir PATH] TASK'
+
+
+def explicit_roots(arguments, names, usage):
+    """Split out the session's explicit roots, kept in the given order for `revust config`."""
+    roots, rest, seen = [], [], set()
+    values = iter(arguments)
+    for argument in values:
+        name, separator, value = argument.partition('=')
+        if name not in names:
+            rest.append(argument)
+            continue
+        if not separator:
+            value = next(values, '')
+            if value.startswith('-'):
+                value = ''
+        if not value:
+            raise HelperError(name + ' requires a non-empty PATH; ' + usage)
+        if name in seen:
+            raise HelperError(name + ' is given more than once; ' + usage)
+        seen.add(name)
+        roots.append(name + '=' + value)
+    return roots, rest
+
+
 def preflight(arguments):
+    roots, arguments = explicit_roots(arguments, ('--config-dir',), PREFLIGHT_USAGE)
     lenses = '--lenses' in arguments
     profiles = [value for value in arguments if value != '--lenses']
     if len(profiles) > 1 or any(value.startswith('-') for value in profiles):
-        raise HelperError('usage: preflight.sh [PROFILE] [--lenses]')
+        raise HelperError(PREFLIGHT_USAGE)
     profile = profiles[0] if profiles else None
-    config = configuration('--effective', *(['--profile', profile] if profile else []))
+    config = configuration('--effective', *roots, *(['--profile', profile] if profile else []))
     try:
         selected = config['selected_profile']
         policy = config['policy']['values']
@@ -75,13 +103,38 @@ def context_count(path):
     return str(files)
 
 
+def physical(path):
+    """Symlink-free path; a not yet created tail is kept below its nearest existing parent."""
+    path, missing = Path(os.path.abspath(path)), []
+    while not os.path.exists(path) and path != path.parent:
+        missing.append(path.name)
+        path = path.parent
+    return Path(os.path.realpath(path)).joinpath(*reversed(missing))
+
+
+def holding_worktree(tasks_root):
+    """The caller's linked Git worktree when the tasks root lies inside it, else None."""
+    try:
+        result = subprocess.run(['git', 'rev-parse', '--git-dir', '--git-common-dir', '--show-toplevel'],
+                                capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = result.stdout.splitlines()
+    if result.returncode or len(lines) != 3:
+        return None
+    git_dir, common_dir, top = (Path(os.path.realpath(line)) for line in lines)
+    tasks = physical(tasks_root)
+    return top if git_dir != common_dir and (tasks == top or top in tasks.parents) else None
+
+
 def task_state(arguments):
-    if len(arguments) != 1:
-        raise HelperError('usage: task-state.sh TASK')
+    roots, arguments = explicit_roots(arguments, ('--tasks-dir', '--config-dir'), TASK_USAGE)
+    if len(arguments) != 1 or arguments[0].startswith('-'):
+        raise HelperError(TASK_USAGE)
     task = arguments[0]
     if not task or task.startswith('.') or '..' in task or any(ch in task for ch in '/\\'):
         raise HelperError('invalid task ID; use a single non-hidden path component')
-    config = configuration()
+    config = configuration(*roots)
     try:
         selected_root = Path(config['paths']['tasks_dir'])
         tasks = selected_root.resolve()
@@ -93,6 +146,10 @@ def task_state(arguments):
     directory = tasks / task
     print('tasks_dir: ' + safe(selected_root))
     print('task_dir: ' + safe(selected_root / task))
+    worktree = holding_worktree(selected_root)
+    if worktree:
+        # An ignored archive does not stop `git worktree remove`, which deletes it.
+        print('archive_in_worktree: true (removed with worktree ' + safe(worktree) + ')')
     if not directory.is_dir() or directory.is_symlink():
         print('exists: false\nrounds: none')
         return 0

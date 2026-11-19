@@ -10,7 +10,8 @@ owned temporary roots. host_peer.py is a file-backed synthetic Guild/agterm peer
 other peers validate terminal-specific argument and ownership boundaries. Cases
 include absent capabilities, malformed receipts, exact selected program/argv/cwd,
 ambiguous acknowledgements, same-key retry, duplicate delivery, honest results,
-owned cleanup and metadata-only helpers. They never control active applications.
+owned cleanup and metadata-only helpers, including explicit roots and a
+disposable Git linked worktree. They never control active applications.
 
 public_tui_checks.py uses local providers and disposable controlling PTYs for 22
 review/archive/filter/resize/signal/input-loss/countdown scenarios. Failed, stopped

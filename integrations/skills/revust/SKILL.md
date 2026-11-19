@@ -31,12 +31,18 @@ with the intended profile and overrides for resolved runners, stage enablement,
 retry policy and deadlines. These commands do not start providers. Do not relay
 child environment entries or credential values from effective configuration.
 
-Use `scripts/preflight.sh [PROFILE] [--lenses]` to check required executable
-availability. It does not validate authentication or prove provider capability.
-Its lens mode checks the base runner replacing the roster, plus enabled stages.
-Select models and effort from the explicit request or resolved profile; the
-initiating harness supplies neither. Preserve explicit false and zero values.
-Consult [executor protocols](../../../docs/executor-protocols.md) and
+When the session selects `--config-dir` or `--tasks-dir`, pass the same roots to
+every revust call and helper: `preflight.sh` takes `--config-dir`,
+`task-state.sh` both, `analyze-corpus.py` takes `--tasks-dir`. Without them a
+call inspects the default roots and misreports profiles and tasks.
+
+Use `scripts/preflight.sh [--config-dir PATH] [PROFILE] [--lenses]` to check
+required executable availability. It does not validate authentication or prove
+provider capability. Its lens mode checks the base runner replacing the roster,
+plus enabled stages. Select models and effort from the explicit request or
+resolved profile; the initiating harness supplies neither. Preserve explicit
+false and zero values. Consult
+[executor protocols](../../../docs/executor-protocols.md) and
 [extensions](../../../docs/extensions-v1.md) for qualified settings and limits.
 Do not silently substitute a provider, model, effort or unsupported option.
 
@@ -56,11 +62,14 @@ calls on a guessed subject. For an authorized remote review, fetch/checkout only
 within the allowed repository/worktree scope, preserving existing changes.
 
 Choose an existing task using configuration metadata and inspect
-`scripts/task-state.sh TASK`. Create a fresh round with `new --task TASK --run
-ROUND`; use the returned paths. Never overwrite claimed or completed evidence.
-Populate `input/scope.md` with the subject and useful commands, optional
-`input/goal.md` with acceptance criteria, and `input/context/` with necessary
-contracts or fetched discussion. Keep private material out of public fixtures.
+`scripts/task-state.sh [--tasks-dir PATH] [--config-dir PATH] TASK`. When it
+prints `archive_in_worktree`, tell the user once that the archive is inside this
+linked Git worktree and is deleted with it. Create a fresh round with
+`new --task TASK --run ROUND`; use the returned paths. Never overwrite claimed or
+completed evidence. Populate `input/scope.md` with the subject and useful
+commands, optional `input/goal.md` with acceptance criteria, and `input/context/`
+with necessary contracts or fetched discussion. Keep private material out of
+public fixtures.
 
 Respect caller calibration: the round profile takes precedence over project
 fallback, and saved prompt observations retain their original content. Do not
