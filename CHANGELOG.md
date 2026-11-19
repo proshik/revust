@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Keep verification group prompt names distinct on case-insensitive volumes.
+- `config --effective`, dry-run and review reject a required reviewer missing
+  from the roster before claiming a round; finder names are unique without
+  regard to case at run time too.
+- Create no further verification worker threads after the run stops, and order
+  retained findings by an ID index instead of a quadratic search.
+- Launchers no longer write bytecode for the shared helper into the installation.
+- OpenCode lookup finds nothing through an empty or unset PATH; preflight
+  reports only regular executable files as available.
+- Codex and OpenCode answers that repeat a JSON key are invalid output.
+- The task inventory reads each task through one directory handle and reports
+  non-UTF-8 round names instead of renaming them; a `task.md` link escaping its
+  task directory is reported as a metadata error.
+
 ## 0.1.8 — 2026-11-19
 
 - Keep every synthesis candidate: inputs synthesis leaves unclaimed stay in
