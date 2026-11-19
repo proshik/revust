@@ -25,8 +25,11 @@ becoming completed sources. Requested models are intent, not observed telemetry.
 
 Shared admission reserves one call before each process attempt across concurrent
 stages/retries. Waiting for a slot consumes no call. Verification groups queue
-behind a worker pool no wider than the verify slots and calls left; a refused
-thread narrows the pool instead of aborting the run. Whole-run deadlines include
+behind a worker pool, the calling thread included, whose width is fixed when the
+stage starts: the global and verify ceilings and the calls left. With no calls
+left, or a run already stopped, the caller alone records each group's stopped
+outcome without dispatching. A refused thread narrows the pool instead of
+aborting the run. Whole-run deadlines include
 queues/backoff and cancel owned execution with bounded cleanup. Per-stage limits
 cannot raise an explicit global ceiling. Reopening observation never resets these
 limits or reruns a provider. Call/time budgets are not dollar or token caps.

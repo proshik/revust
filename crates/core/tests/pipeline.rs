@@ -1114,5 +1114,28 @@ fn cancellation_stops_queued_verification_groups_without_dispatching_them() {
         .map(|a| a.unit.clone())
         .collect::<Vec<_>>();
     assert_eq!(dispatched, ["d0", "d1"]);
-    assert_eq!(r.units.len() - 1, GROUPS);
+    use revust_core::runtime::{events::Kind, worker::Outcome};
+    let cancelled = Outcome::Stopped(StopReason::Cancelled);
+    let outcomes = r.units[1..]
+        .iter()
+        .map(|u| (&u.outcome, u.attempts.len()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        outcomes,
+        [
+            (&Outcome::Success, 1),
+            (&cancelled, 1),
+            (&cancelled, 0),
+            (&cancelled, 0)
+        ]
+    );
+    let published = b.inner.published.lock().unwrap();
+    for name in ["verify d1", "verify d2", "verify d3"] {
+        assert!(
+            published
+                .iter()
+                .any(|e| matches!(e.kind, Kind::AgentDegraded) && e.agent == name),
+            "{name} reports its stopped outcome"
+        );
+    }
 }

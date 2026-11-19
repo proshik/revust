@@ -139,9 +139,12 @@ impl RunControl {
     }
     /// Upper bound on units of `stage` that could hold a slot at once: the
     /// stage and global ceilings and the calls left. At least one, so queued
-    /// units can still report a stopped outcome.
+    /// units can still report a stopped outcome; exactly one once stopped.
     pub(crate) fn dispatch_width(&self, stage: Stage) -> usize {
-        let state = self.0.state.lock().expect("run admission lock poisoned");
+        let mut state = self.0.state.lock().expect("run admission lock poisoned");
+        if self.stopped(&mut state).is_some() {
+            return 1;
+        }
         let calls = self.0.limits.max_calls.map_or(usize::MAX, |max| {
             usize::try_from(max.saturating_sub(state.calls)).unwrap_or(usize::MAX)
         });
@@ -281,6 +284,52 @@ impl Limits {
                 parallel(&values["stages"]["verify"]["parallelism"])?,
             ],
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Attempt, Limits, MonotonicClock, RunControl, Stage};
+    use std::sync::Arc;
+    fn control(max_calls: Option<u64>, max_parallel: usize, verify: usize) -> RunControl {
+        let limits = Limits {
+            max_calls,
+            elapsed: None,
+            max_parallel,
+            stage_parallel: [8, 1, verify],
+        };
+        RunControl::new(limits, Arc::new(MonotonicClock::default())).unwrap()
+    }
+    fn spend(run: &RunControl, calls: usize) {
+        for n in 0..calls {
+            let attempt = Attempt {
+                stage: Stage::Find,
+                unit: n.to_string(),
+                number: 0,
+            };
+            drop(run.try_dispatch(attempt).unwrap());
+        }
+    }
+    #[test]
+    fn dispatch_width_takes_the_lowest_of_both_ceilings_and_calls_left() {
+        assert_eq!(control(None, 1, 6).dispatch_width(Stage::Verify), 1);
+        assert_eq!(control(None, 8, 3).dispatch_width(Stage::Verify), 3);
+        assert_eq!(
+            control(None, usize::MAX, usize::MAX).dispatch_width(Stage::Verify),
+            usize::MAX
+        );
+        let run = control(Some(5), 8, 6);
+        spend(&run, 3);
+        assert_eq!(run.dispatch_width(Stage::Verify), 2);
+    }
+    #[test]
+    fn dispatch_width_is_one_without_calls_or_after_a_stop() {
+        let run = control(Some(2), 8, 6);
+        spend(&run, 2);
+        assert_eq!(run.dispatch_width(Stage::Verify), 1);
+        let run = control(None, 8, 6);
+        run.cancel();
+        assert_eq!(run.dispatch_width(Stage::Verify), 1);
     }
 }
 

@@ -285,6 +285,7 @@ pub fn run(
                     &|| {},
                 )
             },
+            std::thread::Builder::new,
         );
         for unit in verified {
             if let Some(output) = output(&unit) {
@@ -455,7 +456,12 @@ fn execute(
 /// Run `work` over a shared queue with at most `width` native threads, the
 /// caller included, and return results in item order. A refused spawn only
 /// narrows the pool: the remaining workers drain the queue.
-fn pool<T: Sync, R: Send>(width: usize, items: &[T], work: impl Fn(&T) -> R + Sync) -> Vec<R> {
+fn pool<T: Sync, R: Send>(
+    width: usize,
+    items: &[T],
+    work: impl Fn(&T) -> R + Sync,
+    builder: impl Fn() -> std::thread::Builder,
+) -> Vec<R> {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let next = AtomicUsize::new(0);
     let drain = || {
@@ -470,7 +476,7 @@ fn pool<T: Sync, R: Send>(width: usize, items: &[T], work: impl Fn(&T) -> R + Sy
     };
     let mut finished = std::thread::scope(|scope| {
         let helpers: Vec<_> = (1..width.min(items.len()))
-            .map_while(|_| std::thread::Builder::new().spawn_scoped(scope, drain).ok())
+            .map_while(|_| builder().spawn_scoped(scope, drain).ok())
             .collect();
         let mut finished = drain();
         for helper in helpers {
@@ -502,5 +508,66 @@ fn stage_timing(
         effort: runner
             .map(|runner| runner.effort.clone())
             .unwrap_or_default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pool;
+    use std::{
+        collections::BTreeSet,
+        sync::{
+            Mutex,
+            atomic::{AtomicUsize, Ordering},
+        },
+        thread::Builder,
+    };
+    /// Spawns refused by the OS: no host can map this stack.
+    fn refused() -> Builder {
+        Builder::new().stack_size(usize::MAX / 2)
+    }
+    fn run(width: usize, items: usize, admit: usize) -> (Vec<usize>, usize, usize) {
+        let attempts = AtomicUsize::new(0);
+        let threads = Mutex::new(BTreeSet::new());
+        let items = (0..items).collect::<Vec<_>>();
+        let results = pool(
+            width,
+            &items,
+            |n| {
+                threads
+                    .lock()
+                    .unwrap()
+                    .insert(format!("{:?}", std::thread::current().id()));
+                n * 10
+            },
+            || {
+                if attempts.fetch_add(1, Ordering::SeqCst) < admit {
+                    Builder::new()
+                } else {
+                    refused()
+                }
+            },
+        );
+        let threads = threads.lock().unwrap().len();
+        (results, attempts.into_inner(), threads)
+    }
+    #[test]
+    fn helpers_are_bounded_by_width_and_items() {
+        for (width, items, helpers) in [(1, 9, 0), (3, 9, 2), (5, 2, 1), (4, 0, 0)] {
+            let (results, attempts, threads) = run(width, items, usize::MAX);
+            assert_eq!(results, (0..items).map(|n| n * 10).collect::<Vec<_>>());
+            assert_eq!(attempts, helpers, "width {width}, items {items}");
+            assert!(threads <= helpers + 1);
+        }
+    }
+    #[test]
+    fn refused_helpers_narrow_the_pool_and_every_item_still_runs_in_order() {
+        assert!(refused().spawn(|| ()).is_err(), "the host must refuse");
+        for admit in [0, 1] {
+            let (results, attempts, threads) = run(4, 9, admit);
+            assert_eq!(results, (0..9).map(|n| n * 10).collect::<Vec<_>>());
+            assert_eq!(attempts, admit + 1, "spawning stops at the first refusal");
+            assert!(threads <= admit + 1);
+        }
     }
 }
