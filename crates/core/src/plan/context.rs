@@ -1,9 +1,15 @@
-//! Resolve input locations and freeze fallback calibration without creating a round.
-use super::{PlannedCopy, execution::InputPaths};
-use crate::config::runtime::RuntimePaths;
+//! Resolve and freeze round inputs and fallback calibration without creating a round.
+use super::{
+    PlannedCopy,
+    execution::{InputPaths, InputSnapshot},
+};
+use crate::{archive, config::runtime::RuntimePaths};
+use nix::{errno::Errno, fcntl::AtFlags, sys::stat::fstatat};
 use std::{
     collections::BTreeMap,
-    fs, io,
+    ffi::OsString,
+    fs::{self, File},
+    os::unix::ffi::OsStringExt,
     path::{Path, PathBuf},
 };
 pub(super) struct Resolved {
@@ -11,38 +17,122 @@ pub(super) struct Resolved {
     pub input_paths: InputPaths,
     pub profile_snapshot: Option<PlannedCopy>,
     pub snapshot_bytes: Option<Vec<u8>>,
+    pub input_snapshots: Vec<InputSnapshot>,
     pub history: String,
 }
-enum Expected {
-    File,
-    Directory,
+// Context inventory ceiling, matching the input display walk; the shared archive
+// file ceiling bounds each document and the combined frozen inputs.
+const ENTRY_LIMIT: usize = 1024;
+/// Round inputs read exactly once through the contained, nonblocking archive
+/// reader. Providers, stages and replay use only these frozen bytes.
+struct Freezer {
+    root: File,
+    used: u64,
+    entries: usize,
+    snapshots: Vec<InputSnapshot>,
 }
-fn optional(path: &Path, expected: Expected) -> Result<Option<PathBuf>, String> {
-    let metadata = match fs::metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(format!("stat {}: {error}", path.display())),
-    };
-    let present = match expected {
-        Expected::File => {
-            if metadata.is_dir() {
-                return Err(format!("{} is a directory, want a file", path.display()));
-            }
-            metadata.len() > 0
+impl Freezer {
+    fn exists(&self, name: &Path) -> Result<bool, String> {
+        match fstatat(&self.root, name, AtFlags::AT_SYMLINK_NOFOLLOW) {
+            Ok(_) => Ok(true),
+            Err(Errno::ENOENT) => Ok(false),
+            Err(error) => Err(format!("stat {}: {error}", name.display())),
         }
-        Expected::Directory => {
-            if !metadata.is_dir() {
-                return Err(format!("{} is a file, want a directory", path.display()));
-            }
-            fs::read_dir(path)
-                .map_err(|error| format!("read {}: {error}", path.display()))?
-                .next()
-                .transpose()
-                .map_err(|error| format!("read {}: {error}", path.display()))?
-                .is_some()
+    }
+    fn read(&mut self, file: File, name: &Path) -> Result<Vec<u8>, String> {
+        let label = name.to_string_lossy();
+        let bytes = archive::reader::read_file(file, &label)?;
+        self.used += bytes.len() as u64;
+        if self.used > archive::FILE_LIMIT {
+            return Err(format!(
+                "review inputs exceed {} bytes",
+                archive::FILE_LIMIT
+            ));
         }
-    };
-    Ok(present.then(|| path.to_owned()))
+        Ok(bytes)
+    }
+    /// Empty and missing documents are both "not provided" to providers; an
+    /// empty one is still frozen so saved views can tell the two apart.
+    fn document(&mut self, name: &str) -> Result<bool, String> {
+        let source = Path::new("input").join(name);
+        if !self.exists(&source)? {
+            return Ok(false);
+        }
+        let file = archive::open_beneath(&self.root, &source, false)
+            .map_err(|error| format!("read {}: {error}", source.display()))?;
+        let bytes = self.read(file, &source)?;
+        let provided = !bytes.is_empty();
+        self.snapshots.push(InputSnapshot {
+            relative: PathBuf::from(name),
+            content: Some(bytes),
+        });
+        Ok(provided)
+    }
+    fn context(&mut self) -> Result<bool, String> {
+        let source = Path::new("input/context");
+        if !self.exists(source)? {
+            return Ok(false);
+        }
+        let directory = archive::open_beneath(&self.root, source, false)
+            .map_err(|error| format!("read {}: {error}", source.display()))?;
+        if !directory.metadata().is_ok_and(|info| info.is_dir()) {
+            return Err(format!("{} is a file, want a directory", source.display()));
+        }
+        let before = self.snapshots.len();
+        self.walk(directory, Path::new("context"))?;
+        if self.snapshots.len() == before {
+            return Ok(false);
+        }
+        self.snapshots.insert(
+            before,
+            InputSnapshot {
+                relative: PathBuf::from("context"),
+                content: None,
+            },
+        );
+        Ok(true)
+    }
+    fn walk(&mut self, directory: File, relative: &Path) -> Result<(), String> {
+        let label = Path::new("input").join(relative);
+        let failure = |error: nix::Error| format!("read {}: {error}", label.display());
+        let mut names = Vec::new();
+        for entry in nix::dir::Dir::from_fd(directory.into())
+            .map_err(failure)?
+            .iter()
+        {
+            let name = entry.map_err(failure)?.file_name().to_bytes().to_owned();
+            if name != b"." && name != b".." {
+                names.push(OsString::from_vec(name));
+            }
+        }
+        names.sort();
+        for name in names {
+            self.entries += 1;
+            if self.entries > ENTRY_LIMIT {
+                return Err(format!("input/context exceeds {ENTRY_LIMIT} entries"));
+            }
+            let child = relative.join(&name);
+            let source = Path::new("input").join(&child);
+            // Each entry resolves from the round root, so relative links stay
+            // contained in the round and link cycles end at the entry ceiling.
+            let file = archive::open_beneath(&self.root, &source, false)
+                .map_err(|error| format!("read {}: {error}", source.display()))?;
+            if file.metadata().is_ok_and(|info| info.is_dir()) {
+                self.snapshots.push(InputSnapshot {
+                    relative: child.clone(),
+                    content: None,
+                });
+                self.walk(file, &child)?;
+            } else {
+                let bytes = self.read(file, &source)?;
+                self.snapshots.push(InputSnapshot {
+                    relative: child,
+                    content: Some(bytes),
+                });
+            }
+        }
+        Ok(())
+    }
 }
 fn canonical_directory(path: &Path) -> Result<PathBuf, String> {
     if !fs::metadata(path)
@@ -68,12 +158,24 @@ pub(super) fn resolve(paths: &RuntimePaths) -> Result<Resolved, String> {
     if !canonical_directory(round)?.starts_with(&real_task) {
         return Err("round directory escapes task".into());
     }
-    let input = round.join("input");
-    let scope_path = input.join("scope.md");
-    let scope = optional(&scope_path, Expected::File)?
-        .ok_or_else(|| format!("{} is required and must not be empty", scope_path.display()))?;
-    let goal = optional(&input.join("goal.md"), Expected::File)?;
-    let mut profile = optional(&input.join("profile.md"), Expected::File)?;
+    let mut freezer = Freezer {
+        root: archive::reader::open_root(round)?,
+        used: 0,
+        entries: 0,
+        snapshots: Vec::new(),
+    };
+    let frozen = round.join("prompts/input");
+    if !freezer.document("scope.md")? {
+        return Err(format!(
+            "{} is required and must not be empty",
+            round.join("input/scope.md").display()
+        ));
+    }
+    let scope = frozen.join("scope.md");
+    let goal = freezer.document("goal.md")?.then(|| frozen.join("goal.md"));
+    let mut profile = freezer
+        .document("profile.md")?
+        .then(|| frozen.join("profile.md"));
     let mut profile_snapshot = None;
     let mut snapshot_bytes = None;
     if profile.is_none() {
@@ -94,7 +196,7 @@ pub(super) fn resolve(paths: &RuntimePaths) -> Result<Resolved, String> {
             });
         }
     }
-    let context = optional(&input.join("context"), Expected::Directory)?;
+    let context = freezer.context()?.then(|| frozen.join("context"));
     if let Some(error) = &paths.workdir_error {
         return Err(format!("workdir: {error}"));
     }
@@ -127,6 +229,7 @@ pub(super) fn resolve(paths: &RuntimePaths) -> Result<Resolved, String> {
         input_paths,
         profile_snapshot,
         snapshot_bytes,
+        input_snapshots: freezer.snapshots,
         history: crate::history::inventory(task)?,
     })
 }

@@ -126,6 +126,7 @@ impl<P: Fn(&Attempt, &Event) + Sync, J: Fn(Duration) -> Duration + Sync> Backend
             }
             journal.save_calibration(&snapshot.content)?;
         }
+        journal.save_inputs(plan.input_snapshots())?;
         for (name, request) in plan.finder_requests() {
             journal.save_prompt(Stage::Find, name, request.stdin.as_bytes())?;
         }

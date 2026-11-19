@@ -9,7 +9,8 @@ final saved Report; rendering cannot dispatch execution.
 
 Configuration discovery uses caller cwd, while --workdir controls review access.
 A frozen plan keeps selected raw prompt/profile bytes, runner model/effort and
-input paths. Later file or configuration changes cannot alter an active plan.
+round input bytes, which providers read from their frozen copies. Later file or
+configuration changes cannot alter an active plan.
 Placeholder insertion is one pass; inserted content and appended history are
 literal. Empty/missing optional observations remain distinguishable.
 

@@ -196,6 +196,20 @@ impl Journal {
         }
         Ok(())
     }
+    /// Frozen round inputs follow the calibration rule: complete before dispatch.
+    pub fn save_inputs(&self, snapshots: &[crate::plan::InputSnapshot]) -> Result<(), String> {
+        let mut state = self.state.lock().map_err(|_| "journal lock poisoned")?;
+        state.writable()?;
+        if !state.attempts.is_empty() {
+            return Err("input snapshots must precede dispatch".into());
+        }
+        let result = state.prompts.inputs(&self.round_directory, snapshots);
+        if let Err(error) = result {
+            state.fail();
+            return Err(format!("persist input snapshot: {error}"));
+        }
+        Ok(())
+    }
     /// Legacy prompts are written once; identical retry requests reuse their artifact.
     pub fn save_prompt(&self, stage: super::Stage, unit: &str, bytes: &[u8]) -> Result<(), String> {
         let mut state = self.state.lock().map_err(|_| "journal lock poisoned")?;
@@ -377,7 +391,7 @@ impl Journal {
                 state.agents_directory = Some(prompts::directory(&self.round_directory, "agents")?);
             }
             let directory = state.agents_directory.as_ref().unwrap();
-            let file = private_file(directory, &name)?;
+            let file = private_file(directory, name.as_str())?;
             file.sync_all()?;
             directory.sync_all()?;
             Ok(file)
@@ -630,7 +644,10 @@ fn private_directory(parent: &std::fs::File, name: &str) -> std::io::Result<std:
     parent.sync_all()?;
     Ok(directory)
 }
-fn private_file(parent: &std::fs::File, name: &str) -> std::io::Result<std::fs::File> {
+fn private_file<P: ?Sized + nix::NixPath>(
+    parent: &std::fs::File,
+    name: &P,
+) -> std::io::Result<std::fs::File> {
     use nix::{
         fcntl::{OFlag, openat},
         sys::stat::Mode,

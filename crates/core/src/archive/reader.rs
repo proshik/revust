@@ -236,7 +236,7 @@ pub(crate) fn read(root: &File, name: &str) -> Result<Vec<u8>, String> {
     read_file(file, name)
 }
 
-fn read_file(file: File, name: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn read_file(file: File, name: &str) -> Result<Vec<u8>, String> {
     let metadata = file
         .metadata()
         .map_err(|e| format!("stat archive {name}: {e}"))?;

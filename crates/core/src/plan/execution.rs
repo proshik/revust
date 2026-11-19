@@ -23,6 +23,12 @@ pub struct ProfileSnapshot {
     pub source: PathBuf,
     pub content: String,
 }
+/// One round input observation, relative to both input/ and prompts/input/.
+/// A directory has no content; files keep their exact bytes.
+pub struct InputSnapshot {
+    pub relative: PathBuf,
+    pub content: Option<Vec<u8>>,
+}
 /// Input paths selected during resolution, before prompt placeholder formatting.
 /// Optional absence stays distinct from any later filesystem changes.
 pub struct InputPaths {
@@ -39,6 +45,7 @@ pub struct ExecutionPlan {
     extension_profile_snapshot: Option<ProfileSnapshot>,
     definition: Definition,
     snapshots: Vec<Snapshot>,
+    input_snapshots: Vec<InputSnapshot>,
     find: BTreeMap<String, Request>,
     authored_stages: BTreeMap<String, String>,
     variables: BTreeMap<String, String>,
@@ -111,6 +118,7 @@ impl PromptPlan {
                 policy: self.policy,
             },
             snapshots,
+            input_snapshots: self.frozen_inputs,
             find,
             authored_stages: self.authored_stages,
             variables: self.variables,
@@ -155,6 +163,10 @@ impl ExecutionPlan {
     }
     pub fn snapshots(&self) -> &[Snapshot] {
         &self.snapshots
+    }
+    /// Frozen round inputs, written below prompts/input/ before any dispatch.
+    pub fn input_snapshots(&self) -> &[InputSnapshot] {
+        &self.input_snapshots
     }
     pub fn finder_requests(&self) -> impl Iterator<Item = (&str, &Request)> {
         self.find

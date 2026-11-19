@@ -1,6 +1,8 @@
 //! Prompt evidence is owned by physical destination and the original stage unit.
 use super::super::Stage;
+use crate::plan::InputSnapshot;
 use nix::{
+    NixPath,
     fcntl::{OFlag, openat},
     sys::stat::{Mode, mkdirat},
 };
@@ -8,6 +10,7 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{self, Write},
+    path::Component,
 };
 struct Evidence {
     stage: Stage,
@@ -29,6 +32,34 @@ impl Storage {
     }
     pub(super) fn calibration(&mut self, round: &File, bytes: &[u8]) -> io::Result<()> {
         persist(self.root(round)?, "input-profile.md", bytes)
+    }
+    /// Frozen round inputs mirror input/ below prompts/input/, parents first.
+    pub(super) fn inputs(&mut self, round: &File, snapshots: &[InputSnapshot]) -> io::Result<()> {
+        if snapshots.is_empty() {
+            return Ok(());
+        }
+        let base = directory(self.root(round)?, "input")?;
+        for snapshot in snapshots {
+            let mut names = Vec::new();
+            for component in snapshot.relative.components() {
+                match component {
+                    Component::Normal(name) => names.push(name),
+                    _ => return Err(io::Error::other("input snapshot path is not contained")),
+                }
+            }
+            let (last, parents) = names
+                .split_last()
+                .ok_or_else(|| io::Error::other("input snapshot path is empty"))?;
+            let mut parent = base.try_clone()?;
+            for name in parents {
+                parent = directory(&parent, *name)?;
+            }
+            match &snapshot.content {
+                None => drop(directory(&parent, *last)?),
+                Some(bytes) => persist(&parent, *last, bytes)?,
+            }
+        }
+        Ok(())
     }
     pub(super) fn save(
         &mut self,
@@ -62,7 +93,7 @@ impl Storage {
             let handle = directory(self.root(round)?, parent)?;
             self.directories.insert(parent, handle);
         }
-        persist(&self.directories[parent], &destination.1, bytes)?;
+        persist(&self.directories[parent], destination.1.as_str(), bytes)?;
         self.artifacts.insert(
             destination,
             Evidence {
@@ -76,7 +107,7 @@ impl Storage {
 }
 // Retained original descriptor-relative directory primitive; archive ownership is
 // qualified separately from the prompt retention policy above.
-pub(super) fn directory(parent: &File, name: &str) -> io::Result<File> {
+pub(super) fn directory<P: ?Sized + NixPath>(parent: &File, name: &P) -> io::Result<File> {
     match mkdirat(parent, name, Mode::from_bits_truncate(0o700)) {
         Ok(()) => parent.sync_all()?,
         Err(nix::errno::Errno::EEXIST) => (),
@@ -90,7 +121,7 @@ pub(super) fn directory(parent: &File, name: &str) -> io::Result<File> {
     )?))
 }
 
-fn persist(parent: &File, name: &str, bytes: &[u8]) -> io::Result<()> {
+fn persist<P: ?Sized + NixPath>(parent: &File, name: &P, bytes: &[u8]) -> io::Result<()> {
     let mut destination = super::private_file(parent, name)?;
     destination
         .write_all(bytes)

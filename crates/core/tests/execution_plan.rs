@@ -120,7 +120,8 @@ fn frozen_templates_render_actual_results_once_and_snapshot_calibration() {
         assert!(body.ends_with(if stage == Stage::Synthesis { "}" } else { "]" }));
         assert!(!req.stdin.contains("CHANGED AFTER RESOLUTION"));
         assert!(req.stdin.contains("Literal {{SCOPE}} survives."));
-        assert!(req.stdin.contains(input.join("scope.md").to_str().unwrap()));
+        let frozen = input.parent().unwrap().join("prompts/input/scope.md");
+        assert!(req.stdin.contains(frozen.to_str().unwrap()));
         if stage == Stage::Synthesis {
             let inventory: serde_json::Value =
                 serde_json::from_str(&body[body.rfind("\n{").unwrap() + 1..]).unwrap();

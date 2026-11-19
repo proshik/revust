@@ -31,6 +31,13 @@ fn setup_with_policy(
     index: usize,
     extra_policy: Value,
 ) -> (Temp, revust_core::plan::ExecutionPlan, Journal) {
+    setup_with_inputs(index, extra_policy, |_| {})
+}
+fn setup_with_inputs(
+    index: usize,
+    extra_policy: Value,
+    inputs: impl Fn(&std::path::Path),
+) -> (Temp, revust_core::plan::ExecutionPlan, Journal) {
     let root = std::env::temp_dir().join(format!("revust-backend-{}-{index}", std::process::id()));
     fs::create_dir(&root).unwrap();
     let temp = Temp(root);
@@ -48,7 +55,7 @@ fn setup_with_policy(
     let synthesis = executors[index % 3];
     let verify = executors[(index + 1) % 3];
     let profile = format!(
-        "---\nrunner:\n  executor: claude\n  model: fixture/model\nagents:\n  - name: a\n    lenses: [bugs]\n    runner:\n      executor: claude\n      model: fixture/model\n  - name: b\n    lenses: [bugs]\n    runner:\n      executor: codex\n      model: fixture/model\n  - name: c\n    lenses: [bugs]\n    runner:\n      executor: opencode\n      model: fixture/model\nstages:\n  synthesis:\n    executor: {synthesis}\n    model: fixture/model\n  verify:\n    executor: {verify}\n    model: fixture/model\n---\nFIND\n{{SCOPE}}\n"
+        "---\nrunner:\n  executor: claude\n  model: fixture/model\nagents:\n  - name: a\n    lenses: [bugs]\n    runner:\n      executor: claude\n      model: fixture/model\n  - name: b\n    lenses: [bugs]\n    runner:\n      executor: codex\n      model: fixture/model\n  - name: c\n    lenses: [bugs]\n    runner:\n      executor: opencode\n      model: fixture/model\nstages:\n  synthesis:\n    executor: {synthesis}\n    model: fixture/model\n  verify:\n    executor: {verify}\n    model: fixture/model\n---\nFIND\n{{{{SCOPE}}}}\n"
     );
     fs::write(config.join("extension-profiles/mixed.md"), profile).unwrap();
     let mut overrides = json!({});
@@ -88,6 +95,7 @@ fn setup_with_policy(
     let round = tasks.join("test/01");
     fs::create_dir_all(round.join("input")).unwrap();
     fs::write(round.join("input/scope.md"), "synthetic scope").unwrap();
+    inputs(&round.join("input"));
     let invocation = Invocation {
         config_dir: Some(temp.0.join("user")),
         workdir: Some(temp.0.clone()),
@@ -247,7 +255,7 @@ fn all_three_adapters_complete_the_pipeline_and_archive_attempt_evidence() {
         assert_eq!(completed.report.scope.run, "01");
         assert_eq!(
             completed.report.scope.scope_path,
-            round.join("input/scope.md").to_str().unwrap()
+            round.join("prompts/input/scope.md").to_str().unwrap()
         );
         assert_eq!(completed.report.stats.stages.len(), 3);
         assert_eq!(
@@ -1040,4 +1048,54 @@ fn preparation_persists_raw_frozen_prompts_after_sources_disappear() {
         assert_eq!(actual["content"], *content);
         assert_eq!(actual["sha256"].as_str().unwrap().len(), 64);
     }
+}
+
+#[test]
+fn providers_stages_and_archive_share_inputs_frozen_before_dispatch() {
+    let (temp, plan, journal) = setup_with_inputs(3, json!({}), |input| {
+        fs::write(input.join("goal.md"), "synthetic goal").unwrap();
+        fs::create_dir_all(input.join("context/nested")).unwrap();
+        fs::write(input.join("context/nested/notes.md"), "original notes").unwrap();
+    });
+    let round = temp.0.join("tasks/test/01");
+    // The live inputs change after planning, as between staggered finder starts.
+    fs::write(round.join("input/scope.md"), "edited scope").unwrap();
+    fs::write(round.join("input/context/nested/notes.md"), "edited notes").unwrap();
+    fs::write(round.join("input/context/late.md"), "added later").unwrap();
+    let control = RunControl::new(
+        Limits::from_policy(&plan.definition().policy).unwrap(),
+        Arc::new(MonotonicClock::default()),
+    )
+    .unwrap();
+    let backend = Backend::prepare(
+        plan,
+        journal,
+        Options::default(),
+        |_, _| {},
+        |_| Duration::ZERO,
+    )
+    .unwrap();
+    let frozen = round.join("prompts/input");
+    let scope = frozen.join("scope.md");
+    assert_eq!(fs::read_to_string(&scope).unwrap(), "synthetic scope");
+    assert_eq!(
+        fs::read_to_string(frozen.join("goal.md")).unwrap(),
+        "synthetic goal"
+    );
+    assert_eq!(
+        fs::read_to_string(frozen.join("context/nested/notes.md")).unwrap(),
+        "original notes"
+    );
+    assert!(!frozen.join("context/late.md").exists());
+    let completed = backend.run_report(&control).unwrap();
+    assert_eq!(completed.runtime.state, State::Complete);
+    // Every finder and stage request names only the frozen copy.
+    for prompt in ["agents/a.md", "agents/b.md", "agents/c.md"] {
+        let text = fs::read_to_string(round.join("prompts").join(prompt)).unwrap();
+        assert!(text.contains(scope.to_str().unwrap()), "{prompt}: {text}");
+        assert!(!text.contains("01/input/"), "{prompt}: {text}");
+    }
+    assert_eq!(completed.report.scope.scope_path, scope.to_str().unwrap());
+    let manifest: Value = serde_json::from_str(&completed.manifest).unwrap();
+    assert_eq!(manifest["scope_path"], scope.to_str().unwrap());
 }

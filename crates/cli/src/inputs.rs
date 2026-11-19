@@ -35,9 +35,10 @@ impl Sources {
                 .map_or_else(|_| path.to_owned(), |suffix| root.join(suffix))
         };
         // Empty optional documents carry useful display evidence even though
-        // the provider plan intentionally omits their contents.
+        // the provider plan intentionally omits their contents. They are read
+        // from the frozen copy, never from input/ edited after planning.
         let empty_document = |name: &str| {
-            let path = root.join("input").join(name);
+            let path = root.join("prompts/input").join(name);
             fs::symlink_metadata(&path)
                 .is_ok_and(|metadata| metadata.is_file() && metadata.len() == 0)
                 .then_some(path)
@@ -66,13 +67,21 @@ impl Sources {
         let root = fs::canonicalize(path).or_else(|_| std::path::absolute(path))?;
         let profile = root.join("prompts/input-profile.md");
         let saved = fs::symlink_metadata(&profile).is_ok();
+        // Rounds frozen before dispatch show exactly what providers received.
+        // Older archives have no frozen copy and fall back to input/.
+        let frozen = root.join("prompts/input");
+        let input = if fs::symlink_metadata(&frozen).is_ok() {
+            frozen
+        } else {
+            root.join("input")
+        };
         Ok(Self {
-            scope: root.join("input/scope.md"),
+            scope: input.join("scope.md"),
             goal: None,
             profile: saved.then_some(profile),
             profile_is_snapshot: saved,
-            context: Some(root.join("input/context")),
-            input_dir: Some(root.join("input")),
+            context: Some(input.join("context")),
+            input_dir: Some(input),
         })
     }
     fn optional(&self, name: &str, selected: &Option<PathBuf>) -> Option<PathBuf> {

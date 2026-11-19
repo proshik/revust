@@ -23,6 +23,20 @@ impl Tree {
         p
     }
 }
+/// Write frozen inputs as review preparation does before the first dispatch.
+fn freeze(plan: &revust_core::plan::ExecutionPlan) {
+    let base = plan.round().join("prompts/input");
+    for snapshot in plan.input_snapshots() {
+        let path = base.join(&snapshot.relative);
+        match &snapshot.content {
+            None => fs::create_dir_all(&path).unwrap(),
+            Some(bytes) => {
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(&path, bytes).unwrap();
+            }
+        }
+    }
+}
 impl Drop for Tree {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
@@ -311,6 +325,7 @@ fn review_documents_follow_frozen_paths_and_selected_calibration_snapshot() {
         fs::create_dir_all(snapshot.destination.parent().unwrap()).unwrap();
         fs::write(&snapshot.destination, &snapshot.content).unwrap();
     }
+    freeze(&plan);
     let sources = Sources::review(&plan);
     assert!(sources.context.is_none()); // absent at resolution, never used by providers
     let docs = Snapshot::default().load(&sources);
@@ -326,6 +341,7 @@ fn review_documents_follow_frozen_paths_and_selected_calibration_snapshot() {
         .unwrap()
         .into_execution()
         .unwrap();
+    freeze(&plan);
     let sources = Sources::review(&plan);
     assert!(!sources.profile_is_snapshot);
     let docs = Snapshot::default().load(&sources);
@@ -390,6 +406,8 @@ fn review_does_not_substitute_new_optional_contents_after_resolution() {
         .unwrap()
         .into_execution()
         .unwrap();
+    freeze(&plan);
+    fs::write(input.join("scope.md"), "edited after resolution").unwrap();
     fs::write(input.join("goal.md"), "not selected").unwrap();
     fs::write(input.join("profile.md"), "not selected").unwrap();
     let documents = Snapshot::default().load(&Sources::review(&plan));
@@ -405,4 +423,32 @@ fn review_does_not_substitute_new_optional_contents_after_resolution() {
         fs::read_to_string(input.join("profile.md")).unwrap(),
         "not selected"
     );
+}
+
+#[test]
+fn archive_sources_prefer_inputs_frozen_before_dispatch() {
+    let tree = Tree::new();
+    fs::create_dir_all(tree.0.join("input/context")).unwrap();
+    fs::create_dir_all(tree.0.join("prompts/input/context")).unwrap();
+    tree.file("input/scope.md", b"edited after the review");
+    tree.file("input/context/notes.md", b"edited notes");
+    tree.file("prompts/input/scope.md", b"scope the providers read");
+    tree.file("prompts/input/goal.md", b"");
+    tree.file("prompts/input/context/notes.md", b"frozen notes");
+    let docs = Snapshot::default().load(&Sources::archive(&tree.0).unwrap());
+    assert_eq!(
+        docs.iter()
+            .map(|d| (d.label.as_str(), d.content.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("scope", "scope the providers read"),
+            ("goal", ""),
+            ("notes.md", "frozen notes")
+        ]
+    );
+    // Archives saved before inputs were frozen still read input/.
+    fs::remove_dir_all(tree.0.join("prompts/input")).unwrap();
+    let docs = Snapshot::default().load(&Sources::archive(&tree.0).unwrap());
+    assert_eq!(docs[0].content, "edited after the review");
+    assert_eq!(docs[1].content, "edited notes");
 }

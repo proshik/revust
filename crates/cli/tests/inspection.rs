@@ -358,7 +358,13 @@ fn dry_run_preserves_context_paths_and_plans_calibration_without_copying() {
     );
     let plan: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     let body = plan["find"][0]["body"].as_str().unwrap();
-    assert!(body.starts_with(input.join("scope.md").to_str().unwrap()));
+    // Providers receive the copy frozen before dispatch, never live input/.
+    let frozen = input.parent().unwrap().join("prompts/input");
+    assert!(body.starts_with(frozen.join("scope.md").to_str().unwrap()));
+    assert_eq!(
+        plan["input_snapshots"][0]["destination"],
+        frozen.join("scope.md").to_str().unwrap()
+    );
     assert!(!body.contains("DO NOT paste"));
     assert_eq!(plan["variables"]["GOAL"], "none provided");
     assert_eq!(plan["variables"]["CONTEXT"], "none provided");
@@ -386,7 +392,7 @@ fn dry_run_preserves_context_paths_and_plans_calibration_without_copying() {
     assert!(plan["profile_snapshot"].is_null());
     assert_eq!(
         plan["variables"]["PROFILE"],
-        input.join("profile.md").to_str().unwrap()
+        frozen.join("profile.md").to_str().unwrap()
     );
 }
 

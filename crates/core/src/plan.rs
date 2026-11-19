@@ -23,6 +23,8 @@ pub struct PromptPlan {
     effective_policy: serde_json::Value,
     variables: BTreeMap<String, String>,
     profile_snapshot: Option<PlannedCopy>,
+    /// Round input files frozen below prompts/input/ before the first dispatch.
+    input_snapshots: Vec<PlannedCopy>,
     history: String,
     prompt_files: Vec<FileOrigin>,
     find: Vec<Finder>,
@@ -43,6 +45,8 @@ pub struct PromptPlan {
     extension_profile_snapshot: Option<execution::ProfileSnapshot>,
     #[serde(skip)]
     input_paths: execution::InputPaths,
+    #[serde(skip)]
+    frozen_inputs: Vec<execution::InputSnapshot>,
 }
 
 #[derive(Serialize)]
@@ -105,6 +109,7 @@ impl PromptPlan {
             input_paths,
             profile_snapshot,
             snapshot_bytes,
+            input_snapshots: frozen_inputs,
             history,
         } = context::resolve(paths)?;
         let profile = configuration
@@ -222,8 +227,19 @@ impl PromptPlan {
             source: profile.source.clone(),
             content: profile.source_text.clone(),
         });
+        let round = paths.archive.as_ref().expect("resolved round");
+        let input_snapshots = frozen_inputs
+            .iter()
+            .filter(|snapshot| snapshot.content.is_some())
+            .map(|snapshot| PlannedCopy {
+                source: round.join("input").join(&snapshot.relative),
+                destination: round.join("prompts/input").join(&snapshot.relative),
+            })
+            .collect();
         Ok(Self {
             input_paths,
+            frozen_inputs,
+            input_snapshots,
             prompt_snapshots,
             extension_profile_snapshot,
             scope: crate::report::Scope {
@@ -306,4 +322,4 @@ fn planned_request(
 mod context;
 
 mod execution;
-pub use execution::{ExecutionPlan, InputPaths, ProfileSnapshot, PromptSnapshot};
+pub use execution::{ExecutionPlan, InputPaths, InputSnapshot, ProfileSnapshot, PromptSnapshot};

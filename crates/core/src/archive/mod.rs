@@ -222,7 +222,7 @@ fn artifact_components(path: &Path) -> Result<Vec<OsString>, String> {
 fn contained_directory(root: &File, path: &Path) -> Result<File, String> {
     open_beneath(root, path, true)
 }
-fn open_beneath(root: &File, path: &Path, directory: bool) -> Result<File, String> {
+pub(crate) fn open_beneath(root: &File, path: &Path, directory: bool) -> Result<File, String> {
     let mut stack = vec![root.try_clone().map_err(error)?];
     let mut pending: VecDeque<_> = path
         .components()
