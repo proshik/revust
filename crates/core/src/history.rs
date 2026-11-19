@@ -52,12 +52,14 @@ pub fn inventory(task: &Path) -> Result<String, String> {
         return Ok(String::new());
     }
     let mut entries = Vec::new();
+    let task_directory = crate::archive::reader::open_root(task)?;
     for round in crate::config::catalog::rounds(task)? {
         let directory = task.join(&round);
         let modified = fs::metadata(&directory)
             .and_then(|metadata| metadata.modified())
             .map_err(|error| format!("stat {}: {error}", directory.display()))?;
         let mut order: DateTime<Utc> = modified.into();
+        let name = Path::new(&round).to_owned();
         let mut summary = Summary {
             round,
             recorded_at: None,
@@ -67,7 +69,9 @@ pub fn inventory(task: &Path) -> Result<String, String> {
         };
         // Prior reports are untrusted archive content: use the bounded,
         // descriptor-contained, nonblocking reader and skip rejected artifacts.
-        let observed = crate::archive::reader::open_root(&directory)
+        // Discovered rounds are reopened below the held task descriptor without
+        // following a replacement link.
+        let observed = crate::archive::open_directory(&task_directory, &name)
             .and_then(|root| crate::archive::reader::read(&root, "findings.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Option<Observation>>(&bytes).ok())

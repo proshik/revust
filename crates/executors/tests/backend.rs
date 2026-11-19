@@ -47,15 +47,19 @@ fn setup_with_inputs(
     fs::write(config.join("profile.md"), "frozen calibration").unwrap();
     fs::write(
         config.join("prompts/synthesis.md"),
-        "SYNTHESIS\n{{FINDINGS}}\n{{SOURCES}}\n",
+        "SYNTHESIS\n{{FINDINGS}}\n{{SOURCES}}\n{{SCOPE}} {{GOAL}} {{CONTEXT}}\n",
     )
     .unwrap();
-    fs::write(config.join("prompts/verify.md"), "VERIFY\n{{FINDINGS}}\n").unwrap();
+    fs::write(
+        config.join("prompts/verify.md"),
+        "VERIFY\n{{FINDINGS}}\n{{SCOPE}} {{GOAL}} {{CONTEXT}}\n",
+    )
+    .unwrap();
     let executors = ["claude", "codex", "opencode"];
     let synthesis = executors[index % 3];
     let verify = executors[(index + 1) % 3];
     let profile = format!(
-        "---\nrunner:\n  executor: claude\n  model: fixture/model\nagents:\n  - name: a\n    lenses: [bugs]\n    runner:\n      executor: claude\n      model: fixture/model\n  - name: b\n    lenses: [bugs]\n    runner:\n      executor: codex\n      model: fixture/model\n  - name: c\n    lenses: [bugs]\n    runner:\n      executor: opencode\n      model: fixture/model\nstages:\n  synthesis:\n    executor: {synthesis}\n    model: fixture/model\n  verify:\n    executor: {verify}\n    model: fixture/model\n---\nFIND\n{{{{SCOPE}}}}\n"
+        "---\nrunner:\n  executor: claude\n  model: fixture/model\nagents:\n  - name: a\n    lenses: [bugs]\n    runner:\n      executor: claude\n      model: fixture/model\n  - name: b\n    lenses: [bugs]\n    runner:\n      executor: codex\n      model: fixture/model\n  - name: c\n    lenses: [bugs]\n    runner:\n      executor: opencode\n      model: fixture/model\nstages:\n  synthesis:\n    executor: {synthesis}\n    model: fixture/model\n  verify:\n    executor: {verify}\n    model: fixture/model\n---\nFIND\n{{{{SCOPE}}}} {{{{GOAL}}}} {{{{CONTEXT}}}}\n"
     );
     fs::write(config.join("extension-profiles/mixed.md"), profile).unwrap();
     let mut overrides = json!({});
@@ -1089,13 +1093,51 @@ fn providers_stages_and_archive_share_inputs_frozen_before_dispatch() {
     assert!(!frozen.join("context/late.md").exists());
     let completed = backend.run_report(&control).unwrap();
     assert_eq!(completed.runtime.state, State::Complete);
-    // Every finder and stage request names only the frozen copy.
-    for prompt in ["agents/a.md", "agents/b.md", "agents/c.md"] {
+    // Every dispatched finder and stage request names only the frozen copies.
+    let mut prompts = vec![
+        "agents/a.md".to_owned(),
+        "agents/b.md".into(),
+        "agents/c.md".into(),
+    ];
+    prompts.push("stages/synthesis.md".into());
+    for entry in fs::read_dir(round.join("prompts/stages")).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        if name.starts_with("verify-") {
+            prompts.push(format!("stages/{name}"));
+        }
+    }
+    assert!(prompts.len() > 4, "{prompts:?}");
+    let expected = [
+        scope.clone(),
+        frozen.join("goal.md"),
+        frozen.join("context"),
+    ];
+    for prompt in &prompts {
         let text = fs::read_to_string(round.join("prompts").join(prompt)).unwrap();
-        assert!(text.contains(scope.to_str().unwrap()), "{prompt}: {text}");
+        for path in &expected {
+            assert!(text.contains(path.to_str().unwrap()), "{prompt}: {text}");
+        }
         assert!(!text.contains("01/input/"), "{prompt}: {text}");
     }
     assert_eq!(completed.report.scope.scope_path, scope.to_str().unwrap());
     let manifest: Value = serde_json::from_str(&completed.manifest).unwrap();
     assert_eq!(manifest["scope_path"], scope.to_str().unwrap());
+}
+
+#[test]
+fn preparation_refuses_input_snapshots_over_unplanned_files() {
+    let (temp, plan, journal) = setup(4);
+    let stale = temp.0.join("tasks/test/01/prompts/input/context");
+    fs::create_dir_all(&stale).unwrap();
+    fs::write(stale.join("stale.md"), "never planned").unwrap();
+    let error = Backend::prepare(
+        plan,
+        journal,
+        Options::default(),
+        |_, _| {},
+        |_| Duration::ZERO,
+    )
+    .err()
+    .expect("an existing frozen input tree is not ours");
+    assert!(error.contains("persist input snapshot"), "{error}");
 }

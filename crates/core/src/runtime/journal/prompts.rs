@@ -38,7 +38,8 @@ impl Storage {
         if snapshots.is_empty() {
             return Ok(());
         }
-        let base = directory(self.root(round)?, "input")?;
+        // Exclusive: files left in an unclaimed round were never planned.
+        let base = super::private_directory(self.root(round)?, "input")?;
         for snapshot in snapshots {
             let mut names = Vec::new();
             for component in snapshot.relative.components() {

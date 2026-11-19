@@ -39,16 +39,19 @@ impl Freezer {
             Err(error) => Err(format!("stat {}: {error}", name.display())),
         }
     }
+    /// Each read is capped by the remaining combined allowance, so planning
+    /// never holds more than the documented total.
     fn read(&mut self, file: File, name: &Path) -> Result<Vec<u8>, String> {
         let label = name.to_string_lossy();
-        let bytes = archive::reader::read_file(file, &label)?;
+        let remaining = archive::FILE_LIMIT - self.used;
+        let bytes = archive::reader::read_bounded(file, &label, remaining).map_err(|error| {
+            if self.used > 0 && error.ends_with("exceeds size limit") {
+                format!("review inputs exceed {} bytes", archive::FILE_LIMIT)
+            } else {
+                error
+            }
+        })?;
         self.used += bytes.len() as u64;
-        if self.used > archive::FILE_LIMIT {
-            return Err(format!(
-                "review inputs exceed {} bytes",
-                archive::FILE_LIMIT
-            ));
-        }
         Ok(bytes)
     }
     /// Empty and missing documents are both "not provided" to providers; an
@@ -78,23 +81,19 @@ impl Freezer {
         if !directory.metadata().is_ok_and(|info| info.is_dir()) {
             return Err(format!("{} is a file, want a directory", source.display()));
         }
+        // An empty directory is frozen for saved views but not provided.
+        self.snapshots.push(InputSnapshot {
+            relative: PathBuf::from("context"),
+            content: None,
+        });
         let before = self.snapshots.len();
         self.walk(directory, Path::new("context"))?;
-        if self.snapshots.len() == before {
-            return Ok(false);
-        }
-        self.snapshots.insert(
-            before,
-            InputSnapshot {
-                relative: PathBuf::from("context"),
-                content: None,
-            },
-        );
-        Ok(true)
+        Ok(self.snapshots.len() > before)
     }
     fn walk(&mut self, directory: File, relative: &Path) -> Result<(), String> {
         let label = Path::new("input").join(relative);
         let failure = |error: nix::Error| format!("read {}: {error}", label.display());
+        let remaining = ENTRY_LIMIT - self.entries;
         let mut names = Vec::new();
         for entry in nix::dir::Dir::from_fd(directory.into())
             .map_err(failure)?
@@ -103,6 +102,10 @@ impl Freezer {
             let name = entry.map_err(failure)?.file_name().to_bytes().to_owned();
             if name != b"." && name != b".." {
                 names.push(OsString::from_vec(name));
+                // Stop listing once the tree budget is exceeded.
+                if names.len() > remaining {
+                    return Err(format!("input/context exceeds {ENTRY_LIMIT} entries"));
+                }
             }
         }
         names.sort();
@@ -134,6 +137,11 @@ impl Freezer {
         Ok(())
     }
 }
+fn names(path: &Path) -> Result<&Path, String> {
+    path.file_name()
+        .map(Path::new)
+        .ok_or_else(|| format!("{} has no name", path.display()))
+}
 fn canonical_directory(path: &Path) -> Result<PathBuf, String> {
     if !fs::metadata(path)
         .map_err(|error| format!("stat {}: {error}", path.display()))?
@@ -158,8 +166,14 @@ pub(super) fn resolve(paths: &RuntimePaths) -> Result<Resolved, String> {
     if !canonical_directory(round)?.starts_with(&real_task) {
         return Err("round directory escapes task".into());
     }
+    // Inputs are read below descriptors opened the way a claim opens the round:
+    // contained task resolution and a round that is not itself a link.
+    let root = archive::reader::open_root(&paths.tasks_dir)?;
+    let task_directory = archive::contained_directory(&root, names(task)?)
+        .map_err(|error| format!("open {}: {error}", task.display()))?;
     let mut freezer = Freezer {
-        root: archive::reader::open_root(round)?,
+        root: archive::open_directory(&task_directory, names(round)?)
+            .map_err(|error| format!("open {}: {error}", round.display()))?,
         used: 0,
         entries: 0,
         snapshots: Vec::new(),

@@ -185,7 +185,7 @@ fn check_name(name: &str) -> Result<(), String> {
     }
     Ok(())
 }
-fn open_directory(parent: &File, path: &Path) -> Result<File, String> {
+pub(crate) fn open_directory(parent: &File, path: &Path) -> Result<File, String> {
     openat(
         parent,
         path,
@@ -219,7 +219,7 @@ fn artifact_components(path: &Path) -> Result<Vec<OsString>, String> {
 }
 // Resolve a task's relative symlinks below the tasks root. Each directory stays
 // open; '..' pops an owned handle and can never climb above the root.
-fn contained_directory(root: &File, path: &Path) -> Result<File, String> {
+pub(crate) fn contained_directory(root: &File, path: &Path) -> Result<File, String> {
     open_beneath(root, path, true)
 }
 pub(crate) fn open_beneath(root: &File, path: &Path, directory: bool) -> Result<File, String> {

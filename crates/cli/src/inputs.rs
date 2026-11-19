@@ -35,13 +35,17 @@ impl Sources {
                 .map_or_else(|_| path.to_owned(), |suffix| root.join(suffix))
         };
         // Empty optional documents carry useful display evidence even though
-        // the provider plan intentionally omits their contents. They are read
-        // from the frozen copy, never from input/ edited after planning.
+        // the provider plan intentionally omits their contents. Presence comes
+        // from the plan, since sources are selected before preparation writes
+        // the frozen copy, and the view later reads that copy.
         let empty_document = |name: &str| {
-            let path = root.join("prompts/input").join(name);
-            fs::symlink_metadata(&path)
-                .is_ok_and(|metadata| metadata.is_file() && metadata.len() == 0)
-                .then_some(path)
+            plan.input_snapshots()
+                .iter()
+                .any(|snapshot| {
+                    snapshot.relative == Path::new(name)
+                        && snapshot.content.as_ref().is_some_and(Vec::is_empty)
+                })
+                .then(|| root.join("prompts/input").join(name))
         };
         Self {
             scope: anchored(&selected.scope),

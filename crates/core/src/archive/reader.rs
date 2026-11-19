@@ -237,6 +237,12 @@ pub(crate) fn read(root: &File, name: &str) -> Result<Vec<u8>, String> {
 }
 
 pub(crate) fn read_file(file: File, name: &str) -> Result<Vec<u8>, String> {
+    read_bounded(file, name, FILE_LIMIT)
+}
+
+/// The shared bounded read with a caller allowance no larger than FILE_LIMIT.
+pub(crate) fn read_bounded(file: File, name: &str, limit: u64) -> Result<Vec<u8>, String> {
+    let limit = limit.min(FILE_LIMIT);
     let metadata = file
         .metadata()
         .map_err(|e| format!("stat archive {name}: {e}"))?;
@@ -244,11 +250,11 @@ pub(crate) fn read_file(file: File, name: &str) -> Result<Vec<u8>, String> {
         return Err(format!("archive {name}: expected regular file"));
     }
     let mut bytes = Vec::new();
-    if metadata.len() <= FILE_LIMIT {
-        file.take(FILE_LIMIT + 1)
+    if metadata.len() <= limit {
+        file.take(limit + 1)
             .read_to_end(&mut bytes)
             .map_err(|e| format!("read archive {name}: {e}"))?;
-        if bytes.len() as u64 <= FILE_LIMIT {
+        if bytes.len() as u64 <= limit {
             return Ok(bytes);
         }
     }

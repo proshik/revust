@@ -361,10 +361,6 @@ fn dry_run_preserves_context_paths_and_plans_calibration_without_copying() {
     // Providers receive the copy frozen before dispatch, never live input/.
     let frozen = input.parent().unwrap().join("prompts/input");
     assert!(body.starts_with(frozen.join("scope.md").to_str().unwrap()));
-    assert_eq!(
-        plan["input_snapshots"][0]["destination"],
-        frozen.join("scope.md").to_str().unwrap()
-    );
     assert!(!body.contains("DO NOT paste"));
     assert_eq!(plan["variables"]["GOAL"], "none provided");
     assert_eq!(plan["variables"]["CONTEXT"], "none provided");

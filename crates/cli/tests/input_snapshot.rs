@@ -325,8 +325,9 @@ fn review_documents_follow_frozen_paths_and_selected_calibration_snapshot() {
         fs::create_dir_all(snapshot.destination.parent().unwrap()).unwrap();
         fs::write(&snapshot.destination, &snapshot.content).unwrap();
     }
-    freeze(&plan);
+    // Review selects sources before preparation writes the frozen inputs.
     let sources = Sources::review(&plan);
+    freeze(&plan);
     assert!(sources.context.is_none()); // absent at resolution, never used by providers
     let docs = Snapshot::default().load(&sources);
     assert_eq!(

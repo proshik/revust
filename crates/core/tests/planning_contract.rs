@@ -99,6 +99,51 @@ fn planning_freezes_round_inputs_once_with_contained_bounded_reads() {
     // Empty documents are frozen for saved views but not provided to providers.
     assert!(plan.input_paths().goal.is_none());
     assert!(!root.0.join("tasks/task/01/prompts").exists());
+    // A non-UTF-8 context name (where the filesystem permits one) is frozen
+    // natively and the dry-run plan still serializes.
+    let native = input.join(
+        <std::ffi::OsStr as std::os::unix::ffi::OsStrExt>::from_bytes(b"context/bad-\xff.md"),
+    );
+    if fs::write(&native, "native").is_ok() {
+        let inv = Invocation {
+            config_dir: Some(root.0.join("user")),
+            task: "task".into(),
+            run: "01".into(),
+            overrides: vec![(
+                "tasks-dir".into(),
+                root.0.join("tasks").to_str().unwrap().into(),
+            )],
+            ..Default::default()
+        };
+        let plan = PromptPlan::resolve(&root.0, None, &inv, &[]).unwrap();
+        serde_json::to_string(&plan).unwrap();
+        fs::remove_file(&native).unwrap();
+    }
+    // An existing empty context is frozen but not provided.
+    let empty = root.0.join("tasks/task/02/input/context");
+    fs::create_dir_all(&empty).unwrap();
+    fs::write(empty.parent().unwrap().join("scope.md"), "scope").unwrap();
+    let inv = Invocation {
+        config_dir: Some(root.0.join("user")),
+        task: "task".into(),
+        run: "02".into(),
+        overrides: vec![(
+            "tasks-dir".into(),
+            root.0.join("tasks").to_str().unwrap().into(),
+        )],
+        ..Default::default()
+    };
+    let plan = PromptPlan::resolve(&root.0, None, &inv, &[])
+        .unwrap()
+        .into_execution()
+        .unwrap();
+    assert!(plan.input_paths().context.is_none());
+    assert!(
+        plan.input_snapshots()
+            .iter()
+            .any(|s| s.relative == std::path::Path::new("context") && s.content.is_none())
+    );
+    fs::remove_dir_all(root.0.join("tasks/task/02")).unwrap();
     // Links leaving the round, non-regular inputs and oversized inventories fail
     // planning explicitly instead of being read or blocking.
     symlink("../../../../outside.md", input.join("context/escape.md")).unwrap();

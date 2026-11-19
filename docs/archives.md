@@ -10,13 +10,14 @@ attempt's apparent successful output. Raw authored prompt/profile observations
 remain separate from composed requests and original candidates from refinements.
 
 Planning reads the round's input/ documents and input/context/ tree once, with
-bounded, contained, nonblocking reads (regular files and directories only, at most
-1024 context entries, 256 MiB combined). Before the first dispatch those bytes are
-frozen below `prompts/input/`, and SCOPE, GOAL, PROFILE, CONTEXT and the report
-scope path name the frozen copies, so every finder, stage and replay observes the
-same inputs; later edits to input/ do not reach the run. Empty documents are
-frozen but stay "none provided". Archives saved before this freeze fall back to
-input/ when viewed.
+bounded, contained, nonblocking reads (regular files and directories only, at
+most 1024 context entries, 256 MiB combined). Before the first dispatch those
+bytes are frozen below a newly created `prompts/input/`, and SCOPE, GOAL,
+PROFILE, CONTEXT and the report scope path name the frozen copies, so every
+finder, stage and replay observes the same inputs; later edits to input/ do not
+reach the run. Empty documents and an empty context directory are frozen but
+stay "none provided". Archives saved before this freeze fall back to input/
+when viewed.
 
 Raw winning prompt documents (including frontmatter and whitespace) are frozen in
 `revust/prompt-snapshots.json` with path, layer, source and SHA-256. Extension-only
@@ -63,9 +64,11 @@ still use bounded contained reads. This compatibility path never resumes executi
 
 The viewer uses saved settings, observed identity and report data, never today's
 provider accounts or reusable profiles. Reopening cannot rerun a review. Prompt
-history reads prior reports with the same bounded, contained, nonblocking reader;
-a link, FIFO or oversized report is listed as unreadable. History
-and statistics omit private finding bodies; aggregate counts describe recorded
+history reopens each prior round below the task descriptor without following a
+replacement link and reads its report with the same bounded, contained,
+nonblocking reader. A relative alias inside the round is accepted; an absolute
+or escaping link, a FIFO or other nonregular file, or an oversized report is
+listed as unreadable. History and statistics omit private finding bodies; aggregate counts describe recorded
 observations, not total work or causal quality. Missing telemetry is unknown, and
 zero fields in older formats may mean zero or unavailable. Failed/partial attempt
 usage is accounted separately where observed.
