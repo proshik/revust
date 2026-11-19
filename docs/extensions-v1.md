@@ -15,7 +15,8 @@ Profiles map IDs to a policy overlay, or a file under extension-profiles/NAME.md
 plus policy. Structured profiles require explicit selection and cannot shadow an
 ordinary profile. Relative references resolve from the declaring layer and stay
 inside extension-profiles. Their frontmatter uses runner objects with executor,
-model and effort, plus agents and stages. OpenCode requires explicit selection.
+model and effort, plus agents and stages; agent names must differ ignoring letter
+case, as in ordinary profiles. OpenCode requires explicit selection.
 
 | Policy object | Fields |
 | --- | --- |

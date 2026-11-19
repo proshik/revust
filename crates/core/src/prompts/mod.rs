@@ -8,4 +8,5 @@ pub mod template;
 mod tree;
 pub(crate) use tree::color;
 pub(crate) use tree::decode;
+pub(crate) use tree::distinct_agent_names;
 pub use tree::{Agent, Catalog, FileOrigin, PromptSet};

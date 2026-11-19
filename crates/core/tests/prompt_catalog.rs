@@ -154,3 +154,40 @@ fn profile_metadata_is_strict_but_shadowed_documents_do_not_fail_loading() {
             .contains("authored:high")
     );
 }
+
+#[test]
+fn roster_names_must_differ_after_unicode_case_folding() {
+    let tree = Tree::new();
+    let layers = Layers {
+        user: tree.0.clone(),
+        project: None,
+    };
+    let load = |first: &str, second: &str| {
+        tree.put(
+            "prompts/profiles/pair.md",
+            &format!("---\nmodel: codex/test:high\nagents: [{{name: {first}, lenses: [bugs]}}, {{name: {second}, lenses: [tests]}}]\n---\nInspect {{{{SCOPE}}}}\n"),
+        );
+        PromptSet::load(&layers).map(|_| ())
+    };
+    // Each pair names one file on a case-insensitive APFS volume.
+    for (first, second) in [
+        ("Review", "review"),
+        ("Ärger", "ärger"),
+        ("οδοσ", "ΟΔΟς"),
+        ("straße", "STRASSE"),
+        ("\u{212a}elvin", "kelvin"),
+    ] {
+        let error = load(first, second).unwrap_err();
+        assert_eq!(
+            error,
+            format!("profile pair: agent names {first:?} and {second:?} differ only by case")
+        );
+    }
+    assert_eq!(
+        load("same", "same").unwrap_err(),
+        "profile pair: duplicate agent name \"same\""
+    );
+    // APFS keeps dotted capital I distinct from plain i.
+    load("İ", "i").unwrap();
+    load("Review", "logic").unwrap();
+}

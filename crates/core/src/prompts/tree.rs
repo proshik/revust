@@ -184,18 +184,13 @@ impl PromptSet {
             if profile.agents.is_empty() {
                 return Err(format!("profile {id}: roster is empty"));
             }
-            let mut unique = BTreeSet::new();
             for agent in &profile.agents {
                 registry
                     .validate_agent(agent)
                     .map_err(|error| format!("profile {id}: {error}"))?;
-                if !unique.insert(&agent.name) {
-                    return Err(format!(
-                        "profile {id}: duplicate agent name {:?}",
-                        agent.name
-                    ));
-                }
             }
+            distinct_agent_names(&profile.agents)
+                .map_err(|error| format!("profile {id}: {error}"))?;
         }
         Ok(registry)
     }
@@ -530,4 +525,32 @@ pub(crate) fn color(authored: &str, position: usize) -> Result<String, String> {
     Err(format!(
         "invalid color {authored:?}, want an ANSI-16 name or #RRGGBB"
     ))
+}
+/// Finder names become archive file names, so they must stay distinct on
+/// case-insensitive volumes such as default APFS. Lowercasing the uppercase
+/// form approximates Unicode case folding (final sigma, sharp s) without a
+/// table dependency; normalization-equivalent spellings are not detected.
+pub(crate) fn distinct_agent_names(agents: &[Agent]) -> Result<(), String> {
+    let mut seen = BTreeMap::new();
+    for agent in agents {
+        let folded = agent
+            .name
+            .chars()
+            .flat_map(char::to_uppercase)
+            .flat_map(char::to_lowercase)
+            .collect::<String>();
+        match seen.insert(folded, &agent.name) {
+            None => (),
+            Some(previous) if *previous == agent.name => {
+                return Err(format!("duplicate agent name {previous:?}"));
+            }
+            Some(previous) => {
+                return Err(format!(
+                    "agent names {previous:?} and {:?} differ only by case",
+                    agent.name
+                ));
+            }
+        }
+    }
+    Ok(())
 }

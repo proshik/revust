@@ -434,3 +434,95 @@ fn effective_inspection_applies_review_flags_without_a_round() {
     );
     assert_eq!(fs::read_dir(&tree.0).unwrap().count(), 0);
 }
+
+#[test]
+fn rosters_whose_names_differ_only_by_case_fail_before_a_round_exists() {
+    // Finder names become archive file names; default APFS folds case.
+    let tree = Tree::new();
+    let config = tree.0.join(".revust");
+    fs::create_dir_all(config.join("prompts/profiles")).unwrap();
+    fs::create_dir_all(config.join("extension-profiles")).unwrap();
+    fs::create_dir_all(tree.0.join("tasks/demo/first/input")).unwrap();
+    fs::write(tree.0.join("tasks/demo/first/input/scope.md"), "scope").unwrap();
+    let roster = |first: &str, second: &str| {
+        format!(
+            "agents:\n  - name: {first}\n    lenses: [bugs]\n  - name: {second}\n    lenses: [tests]\n---\n{{{{SCOPE}}}}\n"
+        )
+    };
+    let write = |first: &str, second: &str| {
+        fs::write(
+            config.join("prompts/profiles/pair.md"),
+            format!("---\nmodel: codex/test:high\n{}", roster(first, second)),
+        )
+        .unwrap();
+        fs::write(
+            config.join("extension-profiles/pair.md"),
+            format!("---\nrunner:\n  executor: codex\n{}", roster(first, second)),
+        )
+        .unwrap();
+    };
+    let run = |extension: bool, arguments: &[&str]| {
+        fs::write(
+            config.join("extensions.json"),
+            if extension {
+                r#"{"version":1,"profiles":{"structured":{"file":"extension-profiles/pair.md"}}}"#
+            } else {
+                r#"{"version":1}"#
+            },
+        )
+        .unwrap();
+        Command::new(env!("CARGO_BIN_EXE_revust"))
+            .current_dir(&tree.0)
+            .env_clear()
+            .env("HOME", &tree.0)
+            .args(arguments)
+            .args([
+                "--config-dir=.revust",
+                "--tasks-dir=tasks",
+                if extension {
+                    "--profile=structured"
+                } else {
+                    "--profile=pair"
+                },
+            ])
+            .output()
+            .unwrap()
+    };
+    let commands: [&[&str]; 3] = [
+        &["config", "--effective"],
+        &["dry-run", "--task=demo", "--run=first"],
+        &["--task=demo", "--run=first", "--no-tui"],
+    ];
+    write("Review", "review");
+    for extension in [false, true] {
+        for command in commands {
+            let result = run(extension, command);
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            assert!(!result.status.success(), "{command:?} accepted the roster");
+            assert!(
+                stderr.contains("\"Review\"") && stderr.contains("\"review\""),
+                "{command:?}: {stderr}"
+            );
+            assert!(result.stdout.is_empty());
+            assert_eq!(
+                fs::read_dir(tree.0.join("tasks/demo/first"))
+                    .unwrap()
+                    .count(),
+                1,
+                "{command:?} touched the round"
+            );
+        }
+    }
+    // Names that remain distinct after folding keep working.
+    write("Review", "logic");
+    for extension in [false, true] {
+        for command in &commands[..2] {
+            let result = run(extension, command);
+            assert!(
+                result.status.success(),
+                "{command:?}: {}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+        }
+    }
+}

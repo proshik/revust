@@ -198,7 +198,6 @@ fn parse_profile(
     }
     crate::prompts::template::validate(&parts.body)?;
     let mut agents = Vec::new();
-    let mut names = BTreeSet::new();
     for (index, agent) in metadata.agents.into_iter().enumerate() {
         let agent = Agent {
             name: agent.name,
@@ -211,11 +210,9 @@ fn parse_profile(
             color_name: agent.color,
         };
         prompts.validate_agent(&agent)?;
-        if !names.insert(agent.name.clone()) {
-            return Err(format!("profile {name}: duplicate agent name"));
-        }
         agents.push(agent);
     }
+    crate::prompts::distinct_agent_names(&agents).map_err(|e| format!("profile {name}: {e}"))?;
     let mut stages = BTreeMap::new();
     for (stage, spec) in metadata.stages {
         if !crate::prompts::runner::STAGES.contains(&stage.as_str()) {

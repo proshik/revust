@@ -69,6 +69,8 @@ are low, medium, high, xhigh, max; a provider change cannot inherit another
 provider's model. Structured extension runners also support opencode. Stage-file
 settings refine the profile fallback; profile stage overrides refine stage-file
 settings. --lenses replaces the roster with one explicitly composed assignment.
+Agent names become archive file names, so they must differ ignoring letter case:
+loading rejects a roster with Review and review before any round is claimed.
 
 Placeholders are SCOPE, GOAL, PROFILE, CONTEXT, WORKDIR and stage FINDINGS/SOURCES.
 Only valid placeholder identifiers are substituted, once. Supplied values that
