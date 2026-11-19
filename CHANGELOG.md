@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.7 — 2026-11-19
 
 - Run built-in Codex agents on `gpt-6.2-sol`, and the expert profile's Codex
   agent on `gpt-6.2-astra`; effort and colors are unchanged.
