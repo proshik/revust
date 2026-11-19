@@ -913,6 +913,61 @@ fn failed_and_truncated_terminal_payloads_are_saved_without_successful_delivery(
 }
 
 #[test]
+fn repeated_answer_keys_are_invalid_output_instead_of_the_last_value() {
+    use revust_core::runtime::retry::Failure;
+    // Either member order would otherwise decide what validation sees.
+    for (index, answer) in [
+        r#"{"findings":null,"findings":[]}"#,
+        r#"{"findings":[{"file":"src/lib.rs","line":1,"title":"T","confidence":90,"severity":"major","severity":"minor"}]}"#,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (temp, plan, journal) = setup_with_policy(
+            140 + index,
+            json!({
+                "stages":{"synthesis":{"enabled":false},"verify":{"enabled":false}},
+                "retries":{"find":{"count":0}},
+            }),
+        );
+        let opencode = [
+            json!({"type":"text","part":{"id":"text","messageID":"message","text":answer}}),
+            json!({"type":"step_finish","part":{"messageID":"message","reason":"stop","tokens":{"input":2,"output":3,"cache":{"read":0,"write":0}}}}),
+        ]
+        .iter()
+        .map(|v| v.to_string() + "\n")
+        .collect::<String>();
+        for (executor, stdout) in [("codex", answer.to_owned() + "\n"), ("opencode", opencode)] {
+            fs::write(temp.0.join(executor), format!(
+                "#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'opencode v2.0.21\\n'; exit 0; fi\n/bin/cat >/dev/null\nprintf '%s' '{stdout}'\n",
+            )).unwrap();
+        }
+        let control = RunControl::new(
+            Limits::from_policy(&plan.definition().policy).unwrap(),
+            Arc::new(MonotonicClock::default()),
+        )
+        .unwrap();
+        let backend = Backend::prepare(
+            plan,
+            journal,
+            Options::default(),
+            |_, _| {},
+            |_| Duration::ZERO,
+        )
+        .unwrap();
+        let report = backend.run(&control).unwrap();
+        assert_eq!(report.successful_reviewers, ["a"], "case {index}");
+        let snapshot = journal::inspect(&temp.0.join("tasks/test/01")).unwrap();
+        for unit in ["b", "c"] {
+            let attempt = snapshot.attempts.iter().find(|a| a.id.unit == unit).unwrap();
+            let error = attempt.result.as_ref().unwrap().as_ref().unwrap_err();
+            assert_eq!(error.kind, Failure::InvalidOutput, "case {index} {unit}: {error:?}");
+            assert!(error.diagnostic.contains("repeats key"), "case {index} {unit}: {error:?}");
+        }
+    }
+}
+
+#[test]
 fn opencode_protocol_diagnostics_reach_saved_attempts_and_user_events() {
     use revust_core::runtime::retry::Failure;
     let long_stderr =

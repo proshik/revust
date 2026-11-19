@@ -1,4 +1,4 @@
-use revust_executors::codex::{Classification, Stderr, classify, extract};
+use revust_executors::codex::{Classification, Stderr, answer, classify, extract};
 use serde_json::json;
 #[test]
 fn json_extraction_skips_prose_but_never_salvages_nested_truncated_answers() {
@@ -189,4 +189,22 @@ fn oversized_transport_preserves_payload_as_incomplete_evidence() {
     let (result, _) = decoder.finish(false, false);
     assert!(result.truncated);
     assert!(result.tokens.is_none());
+}
+#[test]
+fn a_repeated_key_rejects_the_answer_instead_of_trying_a_later_object() {
+    for raw in [
+        r#"{"findings":null,"findings":[]} {"findings":[]}"#,
+        r#"{"verdicts":[{"id":"a-1","verdict":"confirmed","verdict":"rejected"}]}"#,
+        r#"{"findings":[],"\u0066indings":[]}"#,
+    ] {
+        let error = answer(raw).unwrap_err();
+        assert!(error.contains("repeats key"), "{raw}: {error}");
+        assert_eq!(extract(raw), None, "{raw}");
+    }
+    // The same key in sibling objects is not a repetition.
+    assert_eq!(
+        answer(r#"{"findings":[{"id":"a"},{"id":"b"}],"open_questions":[]}"#),
+        Ok(Some(json!({"findings":[{"id":"a"},{"id":"b"}],"open_questions":[]})))
+    );
+    assert_eq!(answer("no answer"), Ok(None));
 }

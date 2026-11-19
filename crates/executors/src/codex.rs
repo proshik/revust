@@ -71,10 +71,20 @@ impl Stderr {
 /// Locate complete outer objects before parsing. A nested object can never
 /// substitute for an incomplete outer answer, including inside malformed prose.
 pub fn extract(raw: &str) -> Option<Value> {
+    answer(raw).ok().flatten()
+}
+
+/// `extract`, rejecting a located answer that repeats a key in any object:
+/// the parser would keep the last value, so member order would decide what
+/// stage validation sees.
+pub fn answer(raw: &str) -> std::result::Result<Option<Value>, String> {
     let bytes = raw.as_bytes();
     let mut cursor = 0;
     while cursor < bytes.len() {
-        let start = cursor + bytes[cursor..].iter().position(|byte| *byte == b'{')?;
+        let Some(offset) = bytes[cursor..].iter().position(|byte| *byte == b'{') else {
+            return Ok(None);
+        };
+        let start = cursor + offset;
         let (mut depth, mut quoted, mut escaped) = (0usize, false, false);
         let mut boundary = None;
         for (relative, byte) in bytes[start..].iter().copied().enumerate() {
@@ -101,14 +111,74 @@ pub fn extract(raw: &str) -> Option<Value> {
                 }
             }
         }
-        let end = boundary?;
+        let Some(end) = boundary else {
+            return Ok(None);
+        };
         match serde_json::from_slice::<Value>(&bytes[start..end]) {
-            Ok(value) => return Some(value),
-            Err(error) if error.is_eof() => return None,
+            Ok(value) => {
+                return serde_json::from_slice::<Unique>(&bytes[start..end])
+                    .map(|_| Some(value))
+                    .map_err(|error| format!("Provider answer {error}"));
+            }
+            Err(error) if error.is_eof() => return Ok(None),
             Err(_) => cursor = end,
         }
     }
-    None
+    Ok(None)
+}
+
+/// Validates JSON without building it, refusing an object that repeats a key.
+struct Unique;
+impl<'de> serde::Deserialize<'de> for Unique {
+    fn deserialize<D: serde::Deserializer<'de>>(input: D) -> std::result::Result<Self, D::Error> {
+        input.deserialize_any(Unique)
+    }
+}
+impl<'de> serde::de::Visitor<'de> for Unique {
+    type Value = Unique;
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("JSON")
+    }
+    fn visit_bool<E>(self, _: bool) -> std::result::Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_i64<E>(self, _: i64) -> std::result::Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_u64<E>(self, _: u64) -> std::result::Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_f64<E>(self, _: f64) -> std::result::Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_str<E>(self, _: &str) -> std::result::Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_unit<E>(self) -> std::result::Result<Self, E> {
+        Ok(self)
+    }
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(
+        self,
+        mut items: A,
+    ) -> std::result::Result<Self, A::Error> {
+        while items.next_element::<Unique>()?.is_some() {}
+        Ok(self)
+    }
+    fn visit_map<A: serde::de::MapAccess<'de>>(
+        self,
+        mut members: A,
+    ) -> std::result::Result<Self, A::Error> {
+        use serde::de::Error;
+        let mut keys = std::collections::BTreeSet::new();
+        while let Some(key) = members.next_key::<String>()? {
+            if keys.contains(&key) {
+                return Err(A::Error::custom(format!("repeats key {key:?}")));
+            }
+            members.next_value::<Unique>()?;
+            keys.insert(key);
+        }
+        Ok(self)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -171,6 +241,8 @@ pub fn classify(
 #[derive(Debug)]
 pub struct Result {
     pub output: Option<Value>,
+    /// Why a located answer cannot be accepted, such as a repeated key.
+    pub rejected: Option<String>,
     pub actual_model: Option<String>,
     pub tokens: Option<u64>,
     pub classification: Classification,
@@ -224,8 +296,13 @@ impl Decoder {
         if let Classification::RateLimit(signature) = &classification {
             events.push(Event::RateLimit(signature.clone()));
         }
+        let (output, rejected) = match answer(&raw) {
+            Ok(output) => (output, None),
+            Err(reason) => (None, Some(reason)),
+        };
         let result = Result {
-            output: extract(&raw),
+            output,
+            rejected,
             actual_model: self.stderr.actual_model.clone(),
             tokens: if self.diagnostics.overflow {
                 None

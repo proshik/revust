@@ -5,7 +5,9 @@ model, effort, schema, cwd and explicit false/zero controls. Requested models ar
 never substituted from the initiating harness. Raw stdout/stderr are archived
 before decoding; JSON transport observations are not stage-schema acceptance.
 Incomplete/truncated/failed output is retained and qualified rather than promoted
-to successful delivery. Unknown model/token observations remain unknown.
+to successful delivery. Unknown model/token observations remain unknown. A
+Codex or OpenCode answer object that repeats a key at any depth is invalid
+output rather than whichever value came last.
 
 Claude uses JSONL assistant/result events, permission observations and structured
 output; Codex uses a JSON answer plus diagnostic/model/footer observations and

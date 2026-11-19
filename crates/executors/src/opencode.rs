@@ -7,6 +7,8 @@ const MAX_BYTES: usize = 8 << 20;
 #[derive(Default, Debug)]
 pub struct Result {
     pub output: Option<Value>,
+    /// Why a located answer cannot be accepted, such as a repeated key.
+    pub rejected: Option<String>,
     /// A final model response was understood, independently of its JSON validity.
     pub has_text: bool,
     pub tokens: Option<u64>,
@@ -67,7 +69,10 @@ impl Decoder {
         } else {
             self.line(&line, true)
         };
-        self.result.output = crate::codex::extract(&self.text);
+        match crate::codex::answer(&self.text) {
+            Ok(output) => self.result.output = output,
+            Err(reason) => self.result.rejected = Some(reason),
+        }
         // A missing final step_finish was observed in the installed CLI. Partial
         // per-step totals are not presented as total run usage.
         if !self.steps.is_empty() && !self.result.truncated && self.result.malformed_lines == 0 {

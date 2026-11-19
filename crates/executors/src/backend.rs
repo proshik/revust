@@ -254,6 +254,7 @@ impl<P: Fn(&Attempt, &Event) + Sync, J: Fn(Duration) -> Duration + Sync> Backend
                 let p = e.protocol;
                 Ok(Delivery {
                     output: p.output,
+                    rejected: None,
                     model: p.actual_model,
                     tokens: json!(p.tokens),
                     first_token: json!(p.first_token_ms),
@@ -298,6 +299,7 @@ impl<P: Fn(&Attempt, &Event) + Sync, J: Fn(Duration) -> Duration + Sync> Backend
                 };
                 Ok(Delivery {
                     output: p.output,
+                    rejected: p.rejected,
                     model: p.actual_model,
                     tokens: json!(p.tokens),
                     first_token: Value::Null,
@@ -336,6 +338,7 @@ impl<P: Fn(&Attempt, &Event) + Sync, J: Fn(Duration) -> Duration + Sync> Backend
                 let error = opencode_error(&p, &e.process, &diagnostics);
                 Ok(Delivery {
                     output: p.output,
+                    rejected: p.rejected,
                     model: p.actual_model,
                     tokens: json!(p.tokens),
                     first_token: Value::Null,
@@ -447,7 +450,10 @@ fn opencode_error(
         "OpenCode rejected the adapter's CLI arguments".to_owned()
     } else if !process.status.is_some_and(|status| status.success()) {
         return None;
-    } else if protocol.malformed_lines > 0 && protocol.output.is_none() {
+    } else if protocol.malformed_lines > 0
+        && protocol.output.is_none()
+        && protocol.rejected.is_none()
+    {
         format!(
             "OpenCode returned {} JSONL records the adapter could not decode",
             protocol.malformed_lines
@@ -472,6 +478,8 @@ fn process_error(diagnostic: String) -> AttemptFailure {
 }
 struct Delivery {
     output: Option<Value>,
+    /// A located answer that cannot be accepted, such as one repeating a key.
+    rejected: Option<String>,
     model: Option<String>,
     tokens: Value,
     first_token: Value,
@@ -487,13 +495,18 @@ impl Delivery {
                 self.process.termination,
                 Termination::Exited | Termination::IdleTimeout
             );
-        if complete_transport
-            && self.error.is_none()
-            && let Some(output) = self.output
-        {
+        if complete_transport && self.error.is_none() {
             // A complete result is evidence independently of the exit code.
             // Core schema and acceptance policy validation still follow.
-            return Ok(output);
+            if let Some(diagnostic) = self.rejected {
+                return Err(AttemptFailure {
+                    kind: Failure::InvalidOutput,
+                    diagnostic,
+                });
+            }
+            if let Some(output) = self.output {
+                return Ok(output);
+            }
         }
         let (kind, diagnostic) = match (
             self.process.output_complete,
