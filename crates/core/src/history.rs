@@ -53,7 +53,7 @@ pub fn inventory(task: &Path) -> Result<String, String> {
     }
     let mut entries = Vec::new();
     let task_directory = crate::archive::reader::open_root(task)?;
-    for round in crate::config::catalog::rounds(task)? {
+    for round in crate::config::catalog::rounds(&task_directory, task)?.0 {
         let directory = task.join(&round);
         let modified = fs::metadata(&directory)
             .and_then(|metadata| metadata.modified())

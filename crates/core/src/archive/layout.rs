@@ -6,7 +6,7 @@ use nix::{
 };
 use std::{ffi::OsString, fs::File, os::unix::ffi::OsStrExt};
 
-pub(super) fn names(root: &File) -> Result<Vec<OsString>, String> {
+pub(crate) fn names(root: &File) -> Result<Vec<OsString>, String> {
     let mut cursor = nix::dir::Dir::openat(
         root,
         ".",

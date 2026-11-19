@@ -80,3 +80,46 @@ fn inventory_retains_task_metadata_and_lists_only_recorded_real_rounds() {
     );
     assert!(!root.join("unused").exists());
 }
+
+#[cfg(unix)]
+#[test]
+fn rounds_whose_names_are_not_utf8_are_reported_instead_of_renamed() {
+    use std::os::unix::ffi::OsStrExt;
+    let root = std::env::temp_dir().join(format!("revust-task-bytes-{}", std::process::id()));
+    fs::create_dir(&root).unwrap();
+    struct Cleanup<'a>(&'a Path);
+    impl Drop for Cleanup<'_> {
+        fn drop(&mut self) {
+            fs::remove_dir_all(self.0).unwrap();
+        }
+    }
+    let _cleanup = Cleanup(&root);
+    let tasks = root.join(".revust/tasks");
+    put(&tasks, "alpha/01/manifest.json", "{}");
+    // A lossy name would print, and later reopen, "r\u{fffd}" instead.
+    let raw = tasks
+        .join("alpha")
+        .join(std::ffi::OsStr::from_bytes(b"r\xff"));
+    match fs::create_dir(&raw) {
+        // APFS and HFS+ refuse such names, so the case cannot arise there.
+        Err(error) if error.raw_os_error() == Some(nix::libc::EILSEQ) => return,
+        result => result.unwrap(),
+    }
+    fs::write(raw.join("manifest.json"), "{}").unwrap();
+    put(&tasks, "alpha/r\u{fffd}/manifest.json", "{}");
+    let invocation = Invocation {
+        config_dir: Some(root.join("unused")),
+        ..Default::default()
+    };
+    let data: Value =
+        serde_json::to_value(Catalog::resolve(&root, None, &invocation).unwrap()).unwrap();
+    let alpha = &data["paths"]["tasks"][0];
+    assert_eq!(alpha["rounds"], json!(["01", "r\u{fffd}"]));
+    assert!(
+        alpha["rounds_error"]
+            .as_str()
+            .unwrap()
+            .contains("not UTF-8"),
+        "{alpha}"
+    );
+}

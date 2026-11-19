@@ -261,7 +261,7 @@ pub(crate) fn read_bounded(file: File, name: &str, limit: u64) -> Result<Vec<u8>
     Err(format!("archive {name} exceeds size limit"))
 }
 
-pub(super) fn optional(root: &File, name: &str) -> Result<Option<Vec<u8>>, String> {
+pub(crate) fn optional(root: &File, name: &str) -> Result<Option<Vec<u8>>, String> {
     use nix::{errno::Errno, fcntl::AtFlags, sys::stat::fstatat};
     match fstatat(root, name, AtFlags::AT_SYMLINK_NOFOLLOW) {
         Err(Errno::ENOENT) => Ok(None),

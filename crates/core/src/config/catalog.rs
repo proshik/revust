@@ -5,7 +5,7 @@ use super::{
 };
 use crate::prompts::{self, PromptSet, template};
 use serde::{Deserialize, Serialize};
-use std::{fs, io, path::Path};
+use std::{fs, fs::File, io, path::Path};
 
 #[derive(Serialize)]
 pub struct Catalog {
@@ -56,10 +56,16 @@ impl Catalog {
             project: paths.project_dir.clone(),
         })?
         .catalog();
-        let inventory = task_ids(&paths.tasks_dir).map(|ids| {
-            ids.into_iter()
-                .map(|id| inspect_task(&paths.tasks_dir, id))
-                .collect()
+        let inventory = task_ids(&paths.tasks_dir).and_then(|ids| {
+            if ids.is_empty() {
+                return Ok(Vec::new());
+            }
+            let root = crate::archive::reader::open_root(&paths.tasks_dir)
+                .map_err(|error| format!("list tasks: {error}"))?;
+            Ok(ids
+                .into_iter()
+                .map(|id| inspect_task(&root, &paths.tasks_dir, id))
+                .collect())
         });
         let (tasks, tasks_error) = match inventory {
             Ok(tasks) => (tasks, None),
@@ -77,13 +83,24 @@ impl Catalog {
     }
 }
 
-fn inspect_task(root: &Path, id: String) -> Task {
-    let directory = root.join(&id);
+/// Metadata and rounds come from one task directory handle, so a task replaced
+/// during inspection cannot contribute rounds of another directory.
+fn inspect_task(root: &File, root_path: &Path, id: String) -> Task {
+    let directory = root_path.join(&id);
     let mut task = Task {
         id,
         ..Task::default()
     };
-    match read_meta(&directory) {
+    let handle = match crate::archive::contained_directory(root, Path::new(&task.id)) {
+        Ok(handle) => handle,
+        Err(error) => {
+            let error = format!("open {}: {error}", directory.display());
+            task.meta_error = Some(error.clone());
+            task.rounds_error = Some(error);
+            return task;
+        }
+    };
+    match read_meta(&handle, &directory) {
         Ok(Meta {
             description,
             url,
@@ -97,17 +114,22 @@ fn inspect_task(root: &Path, id: String) -> Task {
         }
         Err(error) => task.meta_error = Some(error),
     }
-    match rounds(&directory) {
-        Ok(names) => task.rounds = names,
+    match rounds(&handle, &directory) {
+        Ok((names, skipped)) => {
+            task.rounds = names;
+            task.rounds_error = (!skipped.is_empty()).then(|| skipped.join("; "));
+        }
         Err(error) => task.rounds_error = Some(error),
     }
     task
 }
-fn read_meta(directory: &Path) -> Result<Meta, String> {
+fn read_meta(task: &File, directory: &Path) -> Result<Meta, String> {
     let path = directory.join("task.md");
-    let source = match fs::read_to_string(&path) {
-        Ok(source) => source,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Meta::default()),
+    let source = match crate::archive::reader::optional(task, "task.md") {
+        Ok(Some(bytes)) => {
+            String::from_utf8(bytes).map_err(|error| format!("read {}: {error}", path.display()))?
+        }
+        Ok(None) => return Ok(Meta::default()),
         Err(error) => return Err(format!("read {}: {error}", path.display())),
     };
     template::split(&source)
@@ -147,10 +169,36 @@ pub(crate) fn task_ids(root: &Path) -> Result<Vec<String>, String> {
     })
     .map_err(|error| format!("list tasks: {error}"))
 }
-pub(crate) fn rounds(task: &Path) -> Result<Vec<String>, String> {
-    list(task, |entry| {
-        entry.file_type().is_ok_and(|kind| kind.is_dir())
-            && fs::symlink_metadata(entry.path().join("manifest.json"))
-                .is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
-    })
+/// Recorded rounds below a held task directory, plus diagnostics for rounds
+/// skipped because their names are not UTF-8: a lossy name could reopen a
+/// different round. Neither a round nor its marker may be a symlink.
+pub(crate) fn rounds(task: &File, path: &Path) -> Result<(Vec<String>, Vec<String>), String> {
+    use nix::{fcntl::AtFlags, libc::S_IFMT, sys::stat::fstatat};
+    let kind = |parent: &File, name: &Path| {
+        fstatat(parent, name, AtFlags::AT_SYMLINK_NOFOLLOW)
+            .map(|stat| (stat.st_mode & S_IFMT, stat.st_size))
+    };
+    let mut names = Vec::new();
+    let mut skipped = Vec::new();
+    let entries =
+        crate::archive::names(task).map_err(|error| format!("read {}: {error}", path.display()))?;
+    for name in entries {
+        let recorded = kind(task, Path::new(&name))
+            .is_ok_and(|(mode, _)| mode == nix::libc::S_IFDIR)
+            && crate::archive::open_directory(task, Path::new(&name)).is_ok_and(|round| {
+                kind(&round, Path::new("manifest.json"))
+                    .is_ok_and(|(mode, size)| mode == nix::libc::S_IFREG && size > 0)
+            });
+        if recorded {
+            match name.into_string() {
+                Ok(name) => names.push(name),
+                Err(name) => skipped.push(format!(
+                    "skipped round {:?} in {}: name is not UTF-8",
+                    name.to_string_lossy(),
+                    path.display()
+                )),
+            }
+        }
+    }
+    Ok((names, skipped))
 }

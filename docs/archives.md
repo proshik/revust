@@ -85,7 +85,9 @@ usage is accounted separately where observed.
 
 `stats [--task NAME]` lists observed stages and qualified skipped inputs. A
 supported task alias is listed and selectable by name, but totals count its
-physical task directory once.
+physical task directory once. The `revust config` task inventory reads each
+task's metadata and rounds through one directory handle; a round whose name is
+not UTF-8 is left out and named in `rounds_error` instead of being renamed.
 `scripts/analyze-corpus.py` is read-only metadata analysis; `scripts/task-state.sh`
 shows configured task state. Both honor the selected executable, caller cwd and
 explicit --tasks-dir. The analysis reads stage snapshots up to the writers'

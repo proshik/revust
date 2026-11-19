@@ -204,7 +204,9 @@ fn a_repeated_key_rejects_the_answer_instead_of_trying_a_later_object() {
     // The same key in sibling objects is not a repetition.
     assert_eq!(
         answer(r#"{"findings":[{"id":"a"},{"id":"b"}],"open_questions":[]}"#),
-        Ok(Some(json!({"findings":[{"id":"a"},{"id":"b"}],"open_questions":[]})))
+        Ok(Some(
+            json!({"findings":[{"id":"a"},{"id":"b"}],"open_questions":[]})
+        ))
     );
     assert_eq!(answer("no answer"), Ok(None));
 }
