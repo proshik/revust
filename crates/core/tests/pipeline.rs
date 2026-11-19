@@ -1001,6 +1001,14 @@ fn verification_groups_queue_behind_a_pool_bounded_by_stage_parallelism() {
         Stage::Verify => {
             let n = active.fetch_add(1, Ordering::SeqCst) + 1;
             peak.fetch_max(n, Ordering::SeqCst);
+            // The first group waits, boundedly, for a second worker to overlap.
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while call.attempt.unit == "d0"
+                && peak.load(Ordering::SeqCst) < 2
+                && std::time::Instant::now() < until
+            {
+                std::thread::sleep(Duration::from_millis(1));
+            }
             std::thread::sleep(Duration::from_millis(5));
             active.fetch_sub(1, Ordering::SeqCst);
             if call.attempt.unit == "d2" && call.attempt.number == 0 {
@@ -1020,7 +1028,7 @@ fn verification_groups_queue_behind_a_pool_bounded_by_stage_parallelism() {
         "{} threads served verification with parallelism 2",
         b.thread_count()
     );
-    assert!(peak.load(Ordering::SeqCst) <= 2);
+    assert_eq!(peak.load(Ordering::SeqCst), 2, "two groups overlap");
     let units = r
         .units
         .iter()
@@ -1138,4 +1146,33 @@ fn cancellation_stops_queued_verification_groups_without_dispatching_them() {
             "{name} reports its stopped outcome"
         );
     }
+}
+#[test]
+fn verification_with_no_calls_left_reports_each_group_stopped_without_dispatch() {
+    const GROUPS: usize = 3;
+    let d = definition(verify_policy(json!({"budget":{"max_calls":1}})), &["a"]);
+    let c = control(&d);
+    let b = pooled(|call| match call.attempt.stage {
+        Stage::Find => spread(GROUPS),
+        _ => panic!("no call is left for {:?}", call.attempt),
+    });
+    let r = pipeline::run(&d, &c, &b).unwrap();
+    assert_eq!(r.state, State::Stopped(StopReason::CallBudget));
+    assert!(b.thread_count() <= 1, "{} threads", b.thread_count());
+    use revust_core::runtime::{events::Kind, worker::Outcome};
+    let budget = Outcome::Stopped(StopReason::CallBudget);
+    assert_eq!(r.units.len() - 1, GROUPS);
+    for unit in &r.units[1..] {
+        assert_eq!((&unit.outcome, unit.attempts.len()), (&budget, 0));
+    }
+    let published = b.inner.published.lock().unwrap();
+    for name in ["verify d0", "verify d1", "verify d2"] {
+        assert!(
+            published
+                .iter()
+                .any(|e| matches!(e.kind, Kind::AgentDegraded) && e.agent == name),
+            "{name} reports its stopped outcome"
+        );
+    }
+    assert_eq!(c.calls_spent(), 1);
 }
