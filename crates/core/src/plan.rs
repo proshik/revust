@@ -141,6 +141,8 @@ impl PromptPlan {
             }],
             None => prompts.roster(&profile, lenses)?,
         };
+        crate::runtime::pipeline::check_roster(&roster, &effective)
+            .map_err(|error| format!("profile {profile}: {error}"))?;
         let mut find = Vec::new();
         for agent in roster.clone() {
             let body = match extended {

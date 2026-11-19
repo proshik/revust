@@ -235,6 +235,15 @@ fn invalid_roster_fails_before_spending_calls() {
         assert_eq!(c.calls_spent(), 0);
     }
 }
+#[test]
+fn finder_names_differing_only_by_case_fail_before_spending_calls() {
+    let d = definition(json!({}), &["Review", "review"]);
+    let c = control(&d);
+    let b = backend(answer);
+    let error = pipeline::run(&d, &c, &b).err().unwrap();
+    assert!(error.contains("differ only by case"), "{error}");
+    assert_eq!(c.calls_spent(), 0);
+}
 
 #[test]
 fn source_grouping_uses_resolved_legacy_knob_and_rejected_verdicts_remain_auditable() {

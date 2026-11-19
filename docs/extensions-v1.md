@@ -46,7 +46,9 @@ no eligible errors. Default find delay is 5s plus sampled jitter below 5s;
 synthesis delay is zero. Caps include jitter. Whole-run budget covers every attempt.
 
 Completeness is opt-in. Required reviewer failures, missing synthesis success or
-unverified candidates cannot satisfy a selected gate. synthesis_failure accepts
+unverified candidates cannot satisfy a selected gate. required_reviewers must name
+finders of the selected roster exactly; config --effective, dry-run and review
+reject an absent name before a round is claimed. synthesis_failure accepts
 legacy, fail or passthrough; passthrough retains original candidates marked partial.
 Executor paths are literal executable identities, not shell programs. Environment
 overrides are child-only. Parsing presentation policy does not qualify a native

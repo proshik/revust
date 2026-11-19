@@ -80,28 +80,36 @@ impl Report {
         self.policy_failures.is_empty() && matches!(self.state, State::Complete | State::Partial)
     }
 }
+/// Roster rules shared by inspection, planning and the run, so a bad roster is
+/// refused before a round is claimed. Names fold case as prompt filenames do;
+/// required reviewers name finders exactly. Returns the required reviewers.
+pub fn check_roster(agents: &[Agent], policy: &EffectivePolicy) -> Result<Vec<String>, String> {
+    let required: Vec<String> = serde_json::from_value(
+        policy.execution_values()["completeness"]["required_reviewers"].clone(),
+    )
+    .map_err(|e| e.to_string())?;
+    if agents.iter().any(|agent| agent.name.is_empty()) {
+        return Err("finder names must be nonempty and unique".into());
+    }
+    crate::prompts::distinct_agent_names(agents)?;
+    if agents.is_empty() {
+        return Err("review requires at least one finder".into());
+    }
+    if let Some(name) = required
+        .iter()
+        .find(|name| !agents.iter().any(|agent| agent.name == **name))
+    {
+        return Err(format!("required reviewer {name:?} is absent from roster"));
+    }
+    Ok(required)
+}
 pub fn run(
     definition: &Definition,
     control: &RunControl,
     backend: &impl Backend,
 ) -> Result<Report, String> {
-    use std::collections::BTreeSet;
     let policy = definition.policy.execution_values();
-    let required: Vec<String> =
-        serde_json::from_value(policy["completeness"]["required_reviewers"].clone())
-            .map_err(|e| e.to_string())?;
-    let mut names = BTreeSet::new();
-    for agent in &definition.agents {
-        if agent.name.is_empty() || !names.insert(agent.name.as_str()) {
-            return Err("finder names must be nonempty and unique".into());
-        }
-    }
-    if names.is_empty() {
-        return Err("review requires at least one finder".into());
-    }
-    if let Some(name) = required.iter().find(|name| !names.contains(name.as_str())) {
-        return Err(format!("required reviewer {name} is absent from roster"));
-    }
+    let required = check_roster(&definition.agents, &definition.policy)?;
     // Parse all policies before the first attempt spends a call.
     let retries = [
         super::Stage::Find,

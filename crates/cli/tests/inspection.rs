@@ -529,3 +529,77 @@ fn rosters_whose_names_differ_only_by_case_fail_before_a_round_exists() {
         }
     }
 }
+
+#[test]
+fn required_reviewers_missing_from_the_roster_fail_before_a_round_exists() {
+    let tree = Tree::new();
+    let config = tree.0.join(".revust");
+    fs::create_dir_all(config.join("prompts/profiles")).unwrap();
+    fs::create_dir_all(tree.0.join("tasks/demo/first/input")).unwrap();
+    fs::write(tree.0.join("tasks/demo/first/input/scope.md"), "scope").unwrap();
+    fs::write(
+        config.join("prompts/profiles/pair.md"),
+        "---\nmodel: codex/test:high\nagents:\n  - name: logic\n    lenses: [bugs]\n  - name: tests\n    lenses: [tests]\n---\n{{SCOPE}}\n",
+    )
+    .unwrap();
+    let require = |name: &str| {
+        fs::write(
+            config.join("extensions.json"),
+            format!(
+                r#"{{"version":1,"policy":{{"completeness":{{"required_reviewers":["{name}"]}}}}}}"#
+            ),
+        )
+        .unwrap();
+    };
+    let run = |arguments: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_revust"))
+            .current_dir(&tree.0)
+            .env_clear()
+            .env("HOME", &tree.0)
+            .args(arguments)
+            .args([
+                "--config-dir=.revust",
+                "--tasks-dir=tasks",
+                "--profile=pair",
+            ])
+            .output()
+            .unwrap()
+    };
+    let commands: [&[&str]; 3] = [
+        &["config", "--effective"],
+        &["dry-run", "--task=demo", "--run=first"],
+        &["--task=demo", "--run=first", "--no-tui"],
+    ];
+    // Reviewer identities are exact: a case variant names no finder.
+    for absent in ["security", "Logic"] {
+        require(absent);
+        for command in commands {
+            let result = run(command);
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            assert!(!result.status.success(), "{command:?} accepted {absent}");
+            assert!(
+                stderr.contains(&format!(
+                    "profile pair: required reviewer {absent:?} is absent from roster"
+                )),
+                "{command:?}: {stderr}"
+            );
+            assert!(result.stdout.is_empty());
+            assert_eq!(
+                fs::read_dir(tree.0.join("tasks/demo/first"))
+                    .unwrap()
+                    .count(),
+                1,
+                "{command:?} touched the round"
+            );
+        }
+    }
+    require("logic");
+    for command in &commands[..2] {
+        let result = run(command);
+        assert!(
+            result.status.success(),
+            "{command:?}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+}

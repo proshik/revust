@@ -101,7 +101,13 @@ pub fn inspect_with_policy(
             .cloned()
             .ok_or_else(|| format!("unknown profile {profile:?}"))?
     };
+    let roster = match extensions.profiles.get(profile) {
+        Some(extended) => extended.agents.clone(),
+        None => prompts.roster(profile, &[])?,
+    };
     let mut policy = EffectivePolicy::resolve(&runtime, &extensions.layers, profile, cli)?;
+    crate::runtime::pipeline::check_roster(&roster, &policy)
+        .map_err(|error| format!("profile {profile}: {error}"))?;
     if let Some(value) = min_confidence {
         policy.set_legacy_min_confidence(value);
     }
