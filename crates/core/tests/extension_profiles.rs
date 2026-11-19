@@ -77,3 +77,34 @@ fn missing_unknown_and_shadowing_profile_references_fail_during_load() {
         assert!(ExtensionSet::load(&layers, &legacy).is_err());
     }
 }
+
+#[test]
+fn structured_rosters_cannot_take_stage_display_names() {
+    let (tree, layers) = setup();
+    let legacy = PromptSet::load(&layers).unwrap();
+    fs::write(
+        tree.0.join("extensions.json"),
+        r#"{"version":1,"profiles":{"stage":{"file":"extension-profiles/stage.md"}}}"#,
+    )
+    .unwrap();
+    for (name, accepted) in [
+        ("Synthesis", false),
+        ("verify src", false),
+        ("verifier", true),
+    ] {
+        fs::write(
+            tree.0.join("extension-profiles/stage.md"),
+            format!("---\nrunner:\n  executor: codex\nagents:\n  - name: {name}\n    lenses: [bugs]\n---\nReview {{{{SCOPE}}}}\n"),
+        )
+        .unwrap();
+        match ExtensionSet::load(&layers, &legacy) {
+            Ok(_) => assert!(accepted, "{name} was accepted"),
+            Err(error) => assert_eq!(
+                error,
+                format!(
+                    "profile stage: agent name {name:?} is reserved for synthesis or verification"
+                )
+            ),
+        }
+    }
+}

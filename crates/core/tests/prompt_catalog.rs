@@ -192,4 +192,15 @@ fn roster_names_must_differ_after_unicode_case_folding() {
     load("İ", "i").unwrap();
     load("i", "ı").unwrap();
     load("Review", "logic").unwrap();
+    // Stage units are shown and counted by these names.
+    for reserved in ["synthesis", "Synthesis", "verify src", "VERIFY root-2"] {
+        assert_eq!(
+            load("logic", reserved).unwrap_err(),
+            format!(
+                "profile pair: agent name {reserved:?} is reserved for synthesis or verification"
+            )
+        );
+    }
+    load("synthesizer", "verify-src").unwrap();
+    load("verify", "verifying").unwrap();
 }

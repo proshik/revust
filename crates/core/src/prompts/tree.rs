@@ -532,6 +532,8 @@ pub(crate) fn color(authored: &str, position: usize) -> Result<String, String> {
 /// matches the default case folding without a table dependency. Without
 /// normalization, equivalent spellings are not detected, and names differing
 /// only in combining-mark order after folding U+0345 may be rejected.
+/// Observation and statistics identify stage units by display name, so finder
+/// names must also differ from `synthesis` and every `verify GROUP` name.
 pub(crate) fn distinct_agent_names(agents: &[Agent]) -> Result<(), String> {
     let mut seen = BTreeMap::new();
     for agent in agents {
@@ -543,6 +545,12 @@ pub(crate) fn distinct_agent_names(agents: &[Agent]) -> Result<(), String> {
             } else {
                 folded.extend(c.to_uppercase().flat_map(char::to_lowercase));
             }
+        }
+        if folded == "synthesis" || folded.starts_with("verify ") {
+            return Err(format!(
+                "agent name {:?} is reserved for synthesis or verification",
+                agent.name
+            ));
         }
         match seen.insert(folded, &agent.name) {
             None => (),

@@ -73,6 +73,9 @@ Agent names become archive file names, so they must differ ignoring letter case:
 loading rejects a roster with Review and review before any round is claimed.
 Spellings that differ only in Unicode normalization, such as é and e followed by
 a combining accent, are not detected; APFS treats them as one name, so avoid them.
+The synthesis and verification stages appear under the names synthesis and
+verify GROUP, so loading also rejects a finder named synthesis or starting with
+"verify " in any letter case.
 
 Placeholders are SCOPE, GOAL, PROFILE, CONTEXT, WORKDIR and stage FINDINGS/SOURCES.
 Only valid placeholder identifiers are substituted, once. Supplied values that
