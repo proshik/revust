@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Run built-in Codex agents on `gpt-6.2-sol`, and the expert profile's Codex
+  agent on `gpt-6.2-astra`; effort and colors are unchanged.
+- Stop Claude reviewers from running hooks defined in the reviewed checkout's
+  project settings, which may come from a foreign branch.
+- Accept `--tasks-dir`/`--config-dir` in `task-state.sh` and `--config-dir` in
+  `preflight.sh`, forwarding them to `revust config`; `task-state.sh` reports
+  `archive_in_worktree` when the archive would be deleted with a linked worktree.
+
 ## 0.1.6 — 2026-11-04
 
 - Prioritize review investigation by changed behavior risks while keeping checks
