@@ -32,5 +32,5 @@ a decision or missing fact prevents a defect claim, and pre_existing for defects
 shown to precede the reviewed change. Do not use categories to hide uncertainty
 or unsuccessful reviewer delivery. Do not omit any candidate: verification,
 not consolidation, decides whether a claim is supported, and an input left
-unclaimed is still verified as originally reported.
+unclaimed is kept as originally reported.
 Return all three arrays in the structured result, including empty arrays.

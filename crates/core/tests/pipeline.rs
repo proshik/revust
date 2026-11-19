@@ -879,3 +879,38 @@ fn strict_verification_requires_verdicts_for_unclaimed_synthesis_inputs() {
         .unwrap();
     assert_eq!(unclaimed.verdict, "unverified");
 }
+#[test]
+fn malformed_stage_arrays_and_repeated_verdicts_are_retried_as_invalid_output() {
+    let d = definition(
+        json!({"runtime":{"stagger_delay":"0s"},"retries":{
+            "synthesis":{"count":1,"conditions":["invalid_output"],"delay":{"base":"0s","jitter":"0s"}},
+            "verify":{"count":1,"conditions":["invalid_output"],"delay":{"base":"0s","jitter":"0s"}}}}),
+        &["a"],
+    );
+    let c = control(&d);
+    let b = backend(|call| match (call.attempt.stage, call.attempt.number) {
+        (Stage::Synthesis, 0) => Ok(json!({"findings":null})),
+        (Stage::Verify, 0) => {
+            let id = &call.findings[0].id;
+            Ok(
+                json!({"verdicts":[{"id":id,"verdict":"confirmed"},{"id":id,"verdict":"confirmed"}]}),
+            )
+        }
+        _ => answer(call),
+    });
+    let r = pipeline::run(&d, &c, &b).unwrap();
+    assert_eq!(r.state, State::Complete);
+    assert!(r.synthesis_succeeded);
+    for stage in [Stage::Synthesis, Stage::Verify] {
+        let unit = r
+            .units
+            .iter()
+            .find(|u| u.attempts[0].id.stage == stage)
+            .unwrap();
+        assert_eq!(unit.attempts.len(), 2, "{stage:?}");
+        let first = unit.attempts[0].result.as_ref().unwrap_err();
+        assert_eq!(first.kind, Failure::InvalidOutput, "{stage:?}");
+        assert!(unit.attempts[1].result.is_ok(), "{stage:?}");
+    }
+    assert_eq!(r.categories.findings[0].verdict, "confirmed");
+}

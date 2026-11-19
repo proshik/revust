@@ -94,4 +94,9 @@ fn verifier_rejects_repeated_assessments_regardless_of_order() {
     let value = json!({"verdicts":[{"id":"a\u{1b}[2J","verdict":"confirmed"},{"id":"a\u{1b}[2J","verdict":"confirmed"}]});
     let error = verify(&value, &inputs).unwrap_err();
     assert!(!error.contains('\u{1b}'), "{error:?}");
+    let long = "x".repeat(4096);
+    let value =
+        json!({"verdicts":[{"id":long,"verdict":"confirmed"},{"id":long,"verdict":"rejected"}]});
+    let error = verify(&value, &inputs).unwrap_err();
+    assert!(error.len() < 200, "{}", error.len());
 }

@@ -153,8 +153,8 @@ pub fn synthesize(value: &Value, inputs: &[Finding]) -> Result<Categories, Strin
         }
     }
     // Synthesis organizes candidates; it cannot remove them. An input no output
-    // claimed, whether by model error or an overriding prompt, still reaches
-    // verification as the finder reported it.
+    // claimed, whether by model error or an overriding prompt, stays in findings
+    // as the finder reported it and is assessed when verification is enabled.
     result.dropped = inputs
         .iter()
         .filter(|input| !ownership.claimed.contains(input.id.as_str()))
@@ -220,11 +220,12 @@ pub fn verify(value: &Value, inputs: &[Finding]) -> Result<Vec<Finding>, String>
     let mut patches = BTreeMap::new();
     for item in array(value, "verdicts", true)? {
         let patch = assessment(item)?;
-        // A repeated ID makes the outcome depend on response order.
+        // A repeated ID makes the outcome depend on response order. The
+        // diagnostic quotes a bounded prefix; the full answer stays in evidence.
         if patches.contains_key(&patch.id) {
+            let preview = patch.id.chars().take(80).collect::<String>();
             return Err(format!(
-                "verification assessed ID {:?} more than once",
-                patch.id
+                "verification assessed ID {preview:?} more than once"
             ));
         }
         patches.insert(patch.id.clone(), patch);
