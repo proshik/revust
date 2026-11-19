@@ -21,6 +21,20 @@
 - Run verification groups on a worker pool bounded by verify and global
   parallelism and the remaining call budget instead of one thread per group; a
   refused thread no longer aborts the run before its final report.
+- Reject finder names `synthesis` and `verify …` (any case), which collided with
+  stage rows in the TUI and retry statistics; rename such reviewers in custom
+  profiles.
+- Show saved diagnostics and Markdown written to a terminal as inert text;
+  redirected output and JSON keep the saved bytes.
+- Expire an unterminated bracketed paste after one second (at most 1 MiB) so
+  Ctrl-C and `q` reach the TUI again.
+- Count a supported task alias as its task in `task-state.sh` and `stats`
+  totals; read-only helpers no longer write Python bytecode; corpus analysis
+  reads snapshots up to 256 MiB and compares verification with finder output
+  only when synthesis did not run.
+- The Homebrew formula template checks the formula's resolved version; installed
+  CLI cancellation checks expect the saved stopped outcome; extension edit
+  documentation describes its byte snapshot and advisory lock scope.
 
 ## 0.1.7 — 2026-11-19
 
