@@ -172,6 +172,28 @@ print((root/'effective.json').read_text())
         self.assertIn('claude: '+str(self.provider).replace('\n','?'),result.stdout)
         self.assertIn('ok: true',result.stdout)
 
+    def test_task_state_follows_catalog_alias_but_not_unapproved_or_escaping_links(self):
+        (self.tasks/'alpha/01/input').mkdir(parents=True)
+        (self.tasks/'alpha/01/input/scope.md').write_text('scope')
+        (self.tasks/'alpha/01/manifest.json').write_text('{}')
+        (self.tasks/'alias').symlink_to('alpha',target_is_directory=True)
+        cli=str(ROOT/'target/debug/revust')
+        result=self.invoke('task-state.sh','--tasks-dir',self.tasks,'alias',REVUST_BIN=cli)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('task_dir: '+str(self.tasks/'alias'),result.stdout)
+        self.assertIn('exists: true',result.stdout)
+        self.assertIn('round: 01 ran scope=present',result.stdout)
+        outside=self.root/'outside task';(outside/'01/input').mkdir(parents=True)
+        (outside/'01/input/scope.md').write_text('scope')
+        (self.tasks/'escape').symlink_to('../outside task',target_is_directory=True)
+        (self.tasks/'absolute').symlink_to(self.tasks/'alpha',target_is_directory=True)
+        # The helper keeps its own containment even when a catalog approves a link.
+        self.value['paths']['tasks']=[{'id':name,'rounds':['01']} for name in ('escape','absolute')]
+        for task in ('escape','absolute','alias'):
+            result=self.invoke('task-state.sh',task)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('exists: false\nrounds: none',result.stdout,task)
+
     def git(self, *arguments, cwd):
         subprocess.run(['git','-c','user.name=fixture','-c','user.email=fixture@example.invalid',*arguments],cwd=cwd,
                        env={**self.environment,'GIT_CONFIG_NOSYSTEM':'1'},check=True,capture_output=True,timeout=15)

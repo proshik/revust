@@ -83,7 +83,9 @@ observations, not total work or causal quality. Missing telemetry is unknown, an
 zero fields in older formats may mean zero or unavailable. Failed/partial attempt
 usage is accounted separately where observed.
 
-`stats [--task NAME]` lists observed stages and qualified skipped inputs.
+`stats [--task NAME]` lists observed stages and qualified skipped inputs. A
+supported task alias is listed and selectable by name, but totals count its
+physical task directory once.
 `scripts/analyze-corpus.py` is read-only metadata analysis; `scripts/task-state.sh`
 shows configured task state. Both honor the selected executable, caller cwd and
 explicit --tasks-dir.

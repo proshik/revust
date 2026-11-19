@@ -137,3 +137,39 @@ fn oversized_recorded_usage_is_an_error_instead_of_a_wrapped_total() {
             .contains("token total exceeds")
     );
 }
+
+#[test]
+fn supported_task_alias_is_counted_once_in_totals_and_remains_selectable() {
+    use std::os::unix::fs::symlink;
+    let root = std::env::temp_dir().join(format!("revust-stats-alias-{}", std::process::id()));
+    fs::create_dir(&root).unwrap();
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(root.clone());
+    let round = root.join("alpha/01");
+    fs::create_dir_all(round.join("stages")).unwrap();
+    fs::write(
+        round.join("manifest.json"),
+        r#"{"finished_at":"2026-10-10T12:00:00Z"}"#,
+    )
+    .unwrap();
+    fs::write(round.join("stages/1-found.json"), r#"{"sources":{"agents":[{"name":"alpha","lenses":["bugs"],"tokens":13}]},"findings":[{"sources":["alpha"],"lenses":["bugs"]}]}"#).unwrap();
+    fs::write(round.join("sidecar"), vec![b'x'; 300_000]).unwrap();
+    symlink("alpha", root.join("alias")).unwrap();
+    let corpus = collect(&root, "").unwrap();
+    let ids: Vec<_> = corpus.tasks.iter().map(|task| task.id.as_str()).collect();
+    assert_eq!(ids, ["alias", "alpha"]);
+    assert_eq!(corpus.totals.rounds, 1);
+    assert_eq!(corpus.totals.agents[0].raised, 1);
+    assert_eq!(corpus.totals.agents[0].tokens, 13);
+    assert_eq!(corpus.totals.lenses[0].raised, 1);
+    assert_eq!(corpus.totals.size_mb, corpus.tasks[1].size_mb);
+    let selected = collect(&root, "alias").unwrap();
+    assert_eq!(selected.tasks.len(), 1);
+    assert_eq!(selected.totals.rounds, 1);
+    assert_eq!(selected.totals.agents[0].tokens, 13);
+}

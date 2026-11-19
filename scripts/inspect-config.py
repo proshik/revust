@@ -112,6 +112,21 @@ def physical(path):
     return Path(os.path.realpath(path)).joinpath(*reversed(missing))
 
 
+def task_directory(tasks, task, approved):
+    """The task's physical directory, or None.
+
+    A link is followed only for a catalog-approved relative alias whose target
+    stays inside the tasks root; rounds below it keep the no-follow walk.
+    """
+    directory = tasks / task
+    if not directory.is_symlink():
+        return directory if directory.is_dir() else None
+    if not approved or os.path.isabs(os.readlink(directory)):
+        return None
+    target = Path(os.path.realpath(directory))
+    return target if tasks in target.parents and target.is_dir() else None
+
+
 def holding_worktree(tasks_root):
     """The caller's linked Git worktree when the tasks root lies inside it, else None."""
     try:
@@ -139,18 +154,20 @@ def task_state(arguments):
         selected_root = Path(config['paths']['tasks_dir'])
         tasks = selected_root.resolve()
         entries = config['paths'].get('tasks', [])
-        metadata = next((item for item in entries if item.get('id') == task), {})
+        metadata = next((item for item in entries if item.get('id') == task), None)
+        approved = metadata is not None
+        metadata = metadata or {}
         completed = set(metadata.get('rounds', []))
     except (KeyError, TypeError):
         raise HelperError('configuration has no usable task inventory')
-    directory = tasks / task
     print('tasks_dir: ' + safe(selected_root))
     print('task_dir: ' + safe(selected_root / task))
     worktree = holding_worktree(selected_root)
     if worktree:
         # An ignored archive does not stop `git worktree remove`, which deletes it.
         print('archive_in_worktree: true (removed with worktree ' + safe(worktree) + ')')
-    if not directory.is_dir() or directory.is_symlink():
+    directory = task_directory(tasks, task, approved)
+    if directory is None:
         print('exists: false\nrounds: none')
         return 0
     print('exists: true')

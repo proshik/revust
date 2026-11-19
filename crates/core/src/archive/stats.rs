@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::File,
+    os::unix::fs::MetadataExt,
     path::Path,
 };
 #[derive(Default, Serialize)]
@@ -77,8 +78,11 @@ pub fn collect(root: &Path, selected: &str) -> Result<Corpus, String> {
         return Ok(result);
     }
     let root = reader::open_root(root)?;
+    // A supported relative alias names the same task directory as its target.
+    let mut counted = BTreeSet::new();
     for id in ids {
         let task = super::contained_directory(&root, Path::new(&id))?;
+        let physical = task.metadata().map_err(|error| error.to_string())?;
         let mut summary = TaskStats {
             id,
             description: description(&task),
@@ -110,7 +114,9 @@ pub fn collect(root: &Path, selected: &str) -> Result<Corpus, String> {
         summary.size_bytes = size;
         summary.size_mb = megabytes(size);
         summary.skipped.extend(warnings);
-        merge(&mut result.totals, &summary)?;
+        if counted.insert((physical.dev(), physical.ino())) {
+            merge(&mut result.totals, &summary)?;
+        }
         result.tasks.push(summary);
     }
     Ok(result)
