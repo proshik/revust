@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.8 — 2026-11-19
 
 - Keep every synthesis candidate: inputs synthesis leaves unclaimed stay in
   findings as reported and are verified when verification is enabled. A null or
