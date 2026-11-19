@@ -19,8 +19,9 @@ execution outcome distinguishes durable evidence from a successful review.
 
 ## Installation and status
 
-Release [0.1.0](https://github.com/proshik/revust/releases/tag/v0.1.0) and the
-Homebrew formula are available. The locally qualified target is **macOS Apple Silicon** (`aarch64-apple-darwin`). Intel macOS,
+The [latest release](https://github.com/proshik/revust/releases/latest) and the
+Homebrew formula are available. The formula may lag behind the latest release;
+check its version with `brew info proshik/tap/revust`. The locally qualified target is **macOS Apple Silicon** (`aarch64-apple-darwin`). Intel macOS,
 Linux, Windows and other native terminal hosts need separate qualification.
 
 Install with Homebrew:

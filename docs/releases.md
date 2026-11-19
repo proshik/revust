@@ -1,6 +1,6 @@
 # Release procedure
 
-Release [0.1.0](https://github.com/proshik/revust/releases/tag/v0.1.0) is published.
+Published releases are listed on the [releases](https://github.com/proshik/revust/releases) page.
 A release is accepted only for its exact
 source revision, target, archive checksum and recorded checks. The initial target
 is `aarch64-apple-darwin`; do not advertise other platforms from source portability.

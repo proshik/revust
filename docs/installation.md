@@ -2,8 +2,10 @@
 
 ## Distribution status
 
-Release [0.1.0](https://github.com/proshik/revust/releases/tag/v0.1.0) downloads
-and the Homebrew formula are available for macOS Apple Silicon. Source builds use Rust/Cargo 1.98.0; native
+Downloads of the [latest release](https://github.com/proshik/revust/releases/latest)
+and the Homebrew formula are available for macOS Apple Silicon. The formula may
+lag behind the latest release; check its version with
+`brew info proshik/tap/revust`. Source builds use Rust/Cargo 1.98.0; native
 packaging also needs Git, Python 3.9+, tar, cached locked dependencies and Rust
 standard-library licence documentation. See [packaging](local-packaging.md).
 
