@@ -132,6 +132,39 @@ fn initialization_preserves_assignments_and_raw_profile_bytes_before_export() {
 }
 
 #[test]
+fn initialization_preserves_configuration_text_without_assignments() {
+    use revust_core::{
+        config::runtime::{Invocation, RuntimeConfig},
+        prompts::materialize::initialize,
+    };
+    let root = std::env::temp_dir().join(format!("revust-init-text-{}", std::process::id()));
+    fs::create_dir(&root).unwrap();
+    struct Cleanup(PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(root.clone());
+    let project = root.join("project");
+    let home = root.join("home");
+    fs::create_dir_all(project.join(".revust")).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    let config = project.join(".revust/config");
+    for authored in [
+        &b"max-parallel 4\n"[..],
+        b"# settings\n[Application Options]\nmax-parallel 4\n",
+        b"# settings\n[Application Options\n",
+    ] {
+        fs::write(&config, authored).unwrap();
+        // The CLI validates runtime settings before init; these files pass.
+        RuntimeConfig::resolve(&project, Some(&home), &Invocation::default()).unwrap();
+        initialize(&project, Some(&home), &Invocation::default()).unwrap();
+        assert_eq!(fs::read(&config).unwrap(), authored);
+    }
+}
+
+#[test]
 fn invalid_profile_fails_before_materialization_and_existing_leaf_alias_survives_export() {
     use revust_core::{config::runtime::Invocation, prompts::materialize::initialize};
     let root =

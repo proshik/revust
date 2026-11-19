@@ -51,7 +51,7 @@ pub fn initialize(
     let writer = TreeWriter::open(&destination)?;
     let config = writer.read_config()?;
     match config.as_ref() {
-        Some(snapshot) if has_assignment(&snapshot.bytes) => (),
+        Some(snapshot) if !is_template(&snapshot.bytes) => (),
         expected => writer.replace_config(expected, include_bytes!("../../templates/config"))?,
     }
     let mut files = Vec::with_capacity(entries.len());
@@ -70,16 +70,16 @@ pub fn initialize(
     })
 }
 
-fn has_assignment(bytes: &[u8]) -> bool {
-    for line in String::from_utf8_lossy(bytes).lines() {
-        let trimmed = line.trim();
-        match trimmed.chars().next() {
-            None | Some('#' | ';' | '[') => continue,
-            _ if trimmed.split_once('=').is_some() => return true,
-            _ => (),
-        }
-    }
-    false
+/// Only blank lines, comments and section headers may be refreshed. Any other
+/// text is authored content, even when the INI reader ignores it.
+fn is_template(bytes: &[u8]) -> bool {
+    std::str::from_utf8(bytes).is_ok_and(|source| {
+        source.lines().map(str::trim).all(|line| {
+            line.is_empty()
+                || line.starts_with(['#', ';'])
+                || (line.starts_with('[') && line.ends_with(']'))
+        })
+    })
 }
 
 struct ConfigSnapshot {

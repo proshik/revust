@@ -15,7 +15,8 @@ pub fn read(path: &Path) -> Result<Vec<Entry>, String> {
         Err(error) => return Err(format!("read {}: {error}", path.display())),
         Ok(source) => source,
     };
-    // Comment/header-only files are refreshable templates, not active settings.
+    // Files without assignments are not active settings. init refreshes only
+    // the comment/header-only ones and preserves any other text.
     if !source
         .lines()
         .filter_map(content)
