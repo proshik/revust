@@ -269,10 +269,15 @@ pub fn run(
                 .and_then(|n| usize::try_from(n).ok()),
         );
         let primary = std::mem::take(&mut report.categories.findings);
+        // The first finding with an ID wins, as a linear search would pick it.
+        let mut by_id = std::collections::HashMap::new();
+        for finding in &primary {
+            by_id.entry(finding.id.as_str()).or_insert(finding);
+        }
         report.categories.findings = groups
             .iter()
             .flat_map(|group| &group.findings)
-            .filter_map(|candidate| primary.iter().find(|f| f.id == candidate.id).cloned())
+            .filter_map(|candidate| by_id.get(candidate.id.as_str()).map(|f| (*f).clone()))
             .collect();
         let verified = pool(
             control.dispatch_width(super::Stage::Verify),
