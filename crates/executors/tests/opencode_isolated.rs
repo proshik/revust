@@ -576,3 +576,60 @@ fn inherited_proxies_survive_isolation_and_explicit_values_win() {
         );
     }
 }
+
+#[test]
+fn path_lookup_skips_non_executable_files_and_directories() {
+    const NAME: &str = "path_lookup_skips_non_executable_files_and_directories";
+    let Some(probe) = std::env::var_os("REVUST_LOOKUP_PROBE") else {
+        let tmp = Temp::new();
+        let plain = tmp.0.join("plain");
+        let directory = tmp.0.join("directory");
+        let stub = tmp.0.join("stub");
+        for dir in [&plain, &directory, &stub] {
+            fs::create_dir(dir).unwrap();
+        }
+        // The readable non-executable file would pass the version probe if run.
+        let version = "#!/bin/sh\nprintf 'opencode v2.0.21\\n'\n";
+        fs::write(plain.join("opencode"), version).unwrap();
+        fs::set_permissions(plain.join("opencode"), fs::Permissions::from_mode(0o600)).unwrap();
+        fs::create_dir(directory.join("opencode")).unwrap();
+        fs::rename(script(&stub, response()), stub.join("opencode")).unwrap();
+        for (mode, path) in [
+            ("selects", vec![&plain, &directory, &stub]),
+            ("missing", vec![&plain, &directory]),
+        ] {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", NAME])
+                .env("REVUST_LOOKUP_PROBE", &tmp.0)
+                .env("REVUST_LOOKUP_MODE", mode)
+                .env("PATH", std::env::join_paths(path).unwrap())
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{mode}: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
+        return;
+    };
+    let probe = PathBuf::from(probe);
+    let root = probe.join("private");
+    let prepared = Session::prepare(&root, &settings("opencode".into()), &json!({}));
+    match std::env::var("REVUST_LOOKUP_MODE").unwrap().as_str() {
+        "selects" => {
+            let execution = prepared
+                .unwrap()
+                .run(request(&probe), &control(), |_, _| Ok(()), |_| {})
+                .unwrap();
+            assert_eq!(execution.protocol.output, Some(json!({"findings":[]})));
+        }
+        "missing" => {
+            let error = prepared.err().expect("lookup must fail");
+            assert_eq!(error.kind(), std::io::ErrorKind::NotFound, "{error}");
+            assert_eq!(error.to_string(), "OpenCode executable not found");
+        }
+        mode => panic!("unknown lookup mode {mode}"),
+    }
+    assert!(!root.exists());
+}

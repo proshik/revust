@@ -21,7 +21,10 @@ machine. Its other project settings still apply; Claude itself honours its
 permission allow rules only in a workspace the user has already trusted.
 
 OpenCode uses isolated per-attempt configuration/HOME/XDG/TMPDIR and read-only
-review agent policy. It accepts OpenCode 2.x (numeric major/minor/patch, including
+review agent policy. A bare executable name resolves through revust's PATH as
+`which` does, skipping entries that are not regular files executable by the
+current user; a configured path containing `/` is probed as given. It accepts
+OpenCode 2.x (numeric major/minor/patch, including
 prerelease/build suffixes) and requires an explicit provider/model. Version output
 may be `opencode v2.minor.patch`, `v2.minor.patch` or `2.minor.patch`. Other majors,
 unparseable output and failed/incomplete bounded version probes are rejected
