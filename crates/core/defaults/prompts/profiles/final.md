@@ -3,7 +3,7 @@ description: Release-focused inspection of major and critical defects.
 model: claude/opus:high
 agents:
   - {name: bugs+impl, lenses: [bugs, impl], color: cyan}
-  - {name: adversarial, lenses: [adversarial], model: codex/gpt-6.1-sol:high, color: yellow}
+  - {name: adversarial, lenses: [adversarial], model: codex/gpt-6.2-sol:high, color: yellow}
 ---
 # Review assignment
 

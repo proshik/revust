@@ -2,7 +2,7 @@
 description: Two high-effort investigations of complex changes or plans.
 model: claude/fable:xhigh
 agents:
-  - {name: astra, lenses: [bugs, impl, architecture, quality, docs, tests, comments, adversarial], model: codex/gpt-6-astra:xhigh, color: cyan}
+  - {name: astra, lenses: [bugs, impl, architecture, quality, docs, tests, comments, adversarial], model: codex/gpt-6.2-astra:xhigh, color: cyan}
   - {name: fable, lenses: [bugs, impl, architecture, quality, docs, tests, comments, adversarial], color: magenta}
 ---
 # Review assignment

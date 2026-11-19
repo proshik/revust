@@ -5,7 +5,7 @@ agents:
   - {name: bugs+impl,    lenses: [bugs, impl],            color: cyan}
   - {name: arch+quality, lenses: [architecture, quality], color: magenta}
   - {name: docs+tests,   lenses: [docs, tests, comments], color: green}
-  - {name: adversarial, lenses: [adversarial], model: codex/gpt-6.1-sol:high, color: yellow}
+  - {name: adversarial, lenses: [adversarial], model: codex/gpt-6.2-sol:high, color: yellow}
 ---
 # Review assignment
 

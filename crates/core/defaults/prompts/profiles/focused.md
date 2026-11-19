@@ -3,7 +3,7 @@ description: Short review concentrating on failure paths.
 model: claude/opus:high
 agents:
   - {name: bugs, lenses: [bugs], color: cyan}
-  - {name: adversarial, lenses: [adversarial], model: codex/gpt-6.1-sol:high, color: yellow}
+  - {name: adversarial, lenses: [adversarial], model: codex/gpt-6.2-sol:high, color: yellow}
 ---
 # Review assignment
 

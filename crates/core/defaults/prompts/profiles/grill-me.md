@@ -3,9 +3,9 @@ description: Cross-provider challenge of implementation and design assumptions.
 model: claude/opus:high
 agents:
   - {name: bugs-claude, lenses: [bugs, impl],            color: cyan}
-  - {name: bugs-codex,  lenses: [bugs, impl],            model: codex/gpt-6.1-sol:high, color: bright-cyan}
+  - {name: bugs-codex,  lenses: [bugs, impl],            model: codex/gpt-6.2-sol:high, color: bright-cyan}
   - {name: arch-claude, lenses: [architecture, quality], color: magenta}
-  - {name: arch-codex,  lenses: [architecture, quality], model: codex/gpt-6.1-sol:high, color: bright-magenta}
+  - {name: arch-codex,  lenses: [architecture, quality], model: codex/gpt-6.2-sol:high, color: bright-magenta}
 ---
 # Review assignment
 

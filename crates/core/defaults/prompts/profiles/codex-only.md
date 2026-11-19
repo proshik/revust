@@ -1,6 +1,6 @@
 ---
 description: Broad review using Codex for every stage.
-model: codex/gpt-6.1-sol:high
+model: codex/gpt-6.2-sol:high
 agents:
   - {name: bugs+impl,    lenses: [bugs, impl],            color: cyan}
   - {name: arch+quality, lenses: [architecture, quality], color: magenta}
