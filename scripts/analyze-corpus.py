@@ -12,22 +12,49 @@ from helper_common import HelperError, configuration, safe, open_readonly
 
 CATEGORIES = ('findings', 'open_questions', 'pre_existing', 'immaterial')
 LEVELS = {'minor': 1, 'major': 2, 'critical': 3}
+# The archive writers' inclusive per-file ceiling for reports and stage snapshots.
+FILE_LIMIT = 256 << 20
+
+
+def load(path):
+    """Bounded, regular, no-follow JSON object read."""
+    descriptor = open_readonly(path)
+    with os.fdopen(descriptor, 'rb') as source:
+        if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+            raise ValueError('not a regular file')
+        data = source.read(FILE_LIMIT + 1)
+    if len(data) > FILE_LIMIT:
+        raise ValueError('oversized evidence')
+    decoded = json.loads(data)
+    if not isinstance(decoded, dict):
+        raise ValueError('evidence is not an object')
+    return decoded
 
 
 def document(path):
-    """Bounded, regular, no-follow JSON read; corrupt evidence is unavailable."""
+    """Corrupt evidence is unavailable, the same as absent evidence."""
     try:
-        descriptor = open_readonly(path)
-        with os.fdopen(descriptor, 'rb') as source:
-            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
-                return None
-            data = source.read((32 << 20) + 1)
-        if len(data) > 32 << 20:
-            return None
-        decoded = json.loads(data)
-        return decoded if isinstance(decoded, dict) else None
+        return load(path)
     except (OSError, ValueError, RecursionError):
         return None
+
+
+def checkpoint(path):
+    """(present, value): unlike an absent checkpoint, a present unreadable one is (True, None)."""
+    try:
+        return True, load(path)
+    except FileNotFoundError:
+        return False, None
+    except (OSError, ValueError, RecursionError):
+        return True, None
+
+
+def ran_without_synthesis(report):
+    """True only when the saved stage record shows verification ran and synthesis did not."""
+    stats = report.get('stats')
+    runs = stats.get('stages') if isinstance(stats, dict) else None
+    names = {run.get('name') for run in runs if isinstance(run, dict)} if isinstance(runs, list) else set()
+    return 'verify' in names and 'synthesis' not in names
 
 
 def rows(report):
@@ -108,12 +135,24 @@ def measure(task, run, directory):
             actionable = final.get('findings') or []
             observation.update(gating=sum(row.get('severity') in ('critical', 'major') for row in actionable),
                                minor=sum(row.get('severity') == 'minor' for row in actionable))
-        synthesized = document(directory / 'stages/2-synthesized.json')
+        present, synthesized = checkpoint(directory / 'stages/2-synthesized.json')
         verified = document(directory / 'stages/3-verified.json')
+        unavailable = []
         if synthesized is not None:
             observation['synthesis'] = transition(found, synthesized, False)
+        elif present:
+            unavailable.append('synthesis')
         if verified is not None:
-            observation['verify'] = transition(synthesized if synthesized is not None else found, verified, True)
+            # Verification consumed finder output only when synthesis never ran;
+            # a failed or unreadable synthesis leaves the verify input unknown.
+            if synthesized is not None:
+                observation['verify'] = transition(synthesized, verified, True)
+            elif not present and ran_without_synthesis(verified):
+                observation['verify'] = transition(found, verified, True)
+            else:
+                unavailable.append('verify')
+        if unavailable:
+            observation['unavailable'] = unavailable
         return observation
     except (ValueError, TypeError):
         return None

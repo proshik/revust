@@ -243,7 +243,7 @@ print((root/'effective.json').read_text())
         for run in ('01','02','03'):
             self.write(run,'manifest.json',{'run':run})
             self.write(run,'stages/1-found.json',before)
-        self.write('01','stages/3-verified.json',after)
+        self.write('01','stages/3-verified.json',{**after,'stats':{'stages':[{'name':'find'},{'name':'verify'}]}})
         self.write('01','findings.json',after)
         self.write('02','stages/2-synthesized.json',{'findings':[before['findings'][0]]})
         self.write('04-corrupt','manifest.json',{})
@@ -266,10 +266,45 @@ print((root/'effective.json').read_text())
         self.assertIn('?',data['totals']['lens_naming'])
         self.assertEqual(hashes(self.tasks),snapshot)
 
+    def test_corpus_verify_baseline_requires_evidence_that_synthesis_did_not_run(self):
+        found={'findings':[{'id':'a','severity':'major'},{'id':'b','severity':'major'}]}
+        verified={'findings':[{'id':'a','severity':'minor'}]}
+        def ran(*names):
+            return {**verified,'stats':{'stages':[{'name':name} for name in names]}}
+        for run in ('01-disabled','02-failed','03-corrupt','04-unrecorded','05-large'):
+            self.write(run,'manifest.json',{})
+            self.write(run,'stages/1-found.json',found)
+        self.write('01-disabled','stages/3-verified.json',ran('find','verify'))
+        self.write('02-failed','stages/3-verified.json',ran('find','synthesis','verify'))
+        self.write('03-corrupt','stages/2-synthesized.json','broken')
+        self.write('03-corrupt','stages/3-verified.json',ran('find','synthesis','verify'))
+        self.write('04-unrecorded','stages/3-verified.json',verified)
+        # Above the old 32 MiB read bound, within the archive writers' ceiling.
+        large={'findings':[{**row,'body':'x'*(33<<20) if row['id']=='a' else ''} for row in found['findings']]}
+        self.write('05-large','stages/2-synthesized.json',large)
+        self.write('05-large','stages/3-verified.json',ran('find','synthesis','verify'))
+        result=self.invoke('analyze-corpus.py','--tasks-dir',self.tasks,'--json')
+        self.assertEqual(result.returncode,0,result.stderr)
+        data=json.loads(result.stdout)
+        rounds={row['run']:row for row in data['rounds']}
+        self.assertEqual(rounds['01-disabled']['verify']['removed'],1)
+        self.assertEqual(rounds['01-disabled']['verify']['demoted'],1)
+        for run,unavailable in [('02-failed',['verify']),('03-corrupt',['synthesis','verify']),('04-unrecorded',['verify'])]:
+            self.assertNotIn('verify',rounds[run],run)
+            self.assertNotIn('synthesis',rounds[run],run)
+            self.assertEqual(rounds[run]['unavailable'],unavailable,run)
+        self.assertEqual(rounds['05-large']['synthesis'],{'removed':0})
+        self.assertEqual(rounds['05-large']['verify']['removed'],1)
+        self.assertNotIn('unavailable',rounds['05-large'])
+        self.assertEqual(data['totals']['synthesis'],{'rounds':1,'removed':0})
+        self.assertEqual(data['totals']['verify']['rounds'],2)
+        self.assertEqual(data['totals']['verify']['removed'],2)
+
     def test_corpus_duplicate_ids_and_unknown_severities_are_not_comparable(self):
         self.write('01','manifest.json',{})
         self.write('01','stages/1-found.json',{'findings':[{'id':'d','severity':'major'},{'id':'d','severity':'minor'},{'id':'u','severity':'unknown'}]})
-        self.write('01','stages/3-verified.json',{'immaterial':[{'id':'d','severity':'minor'},{'id':'u','severity':'critical'}]})
+        self.write('01','stages/3-verified.json',{'immaterial':[{'id':'d','severity':'minor'},{'id':'u','severity':'critical'}],
+                                                  'stats':{'stages':[{'name':'find'},{'name':'verify'}]}})
         result=self.invoke('analyze-corpus.py','--tasks-dir',self.tasks,'--json')
         data=json.loads(result.stdout)
         observed=data['totals']['verify']

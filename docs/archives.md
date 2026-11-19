@@ -88,7 +88,13 @@ supported task alias is listed and selectable by name, but totals count its
 physical task directory once.
 `scripts/analyze-corpus.py` is read-only metadata analysis; `scripts/task-state.sh`
 shows configured task state. Both honor the selected executable, caller cwd and
-explicit --tasks-dir.
+explicit --tasks-dir. The analysis reads stage snapshots up to the writers'
+256 MiB ceiling. Verification is compared with the synthesis snapshot, or with
+the finder snapshot only when the verify snapshot's stage record shows that
+synthesis did not run; a present but unreadable synthesis snapshot or a missing
+one after a recorded synthesis attempt lists the comparison under `unavailable`.
+Synthesis removals count finder IDs absent from synthesis output: merged
+candidates, and drops in archives written before synthesis kept unclaimed ones.
 `cleanup --task NAME` refuses active/ambiguous locks and confines deletion to its
 owned selected root. It may leave partial deletion on I/O failure and does not
 serialize against every possible future review start. Never run it on user data
