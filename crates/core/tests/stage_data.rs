@@ -79,11 +79,19 @@ fn verifier_keeps_unknowns_unverified_and_applies_only_qualified_refinements() {
 #[test]
 fn verifier_rejects_repeated_assessments_regardless_of_order() {
     let inputs = vec![finding("a", "one")];
-    for verdicts in [["confirmed", "rejected"], ["rejected", "confirmed"]] {
+    for verdicts in [
+        ["confirmed", "rejected"],
+        ["rejected", "confirmed"],
+        ["confirmed", "confirmed"],
+    ] {
         let value = json!({"verdicts":[
             {"id":"a","verdict":verdicts[0]},
             {"id":"a","verdict":verdicts[1]}]});
         let error = verify(&value, &inputs).unwrap_err();
         assert!(error.contains("more than once"), "{error}");
     }
+    // Provider-authored IDs are escaped before they reach saved diagnostics.
+    let value = json!({"verdicts":[{"id":"a\u{1b}[2J","verdict":"confirmed"},{"id":"a\u{1b}[2J","verdict":"confirmed"}]});
+    let error = verify(&value, &inputs).unwrap_err();
+    assert!(!error.contains('\u{1b}'), "{error:?}");
 }

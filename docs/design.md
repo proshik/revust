@@ -16,8 +16,8 @@ literal. Empty/missing optional observations remain distinguishable.
 
 Finders own source identities. Synthesis can consolidate only known input IDs
 and cannot remove candidates: inputs no output claims, including those a custom
-prompt omits, reach verification unchanged and are listed in a dropped audit
-event. A null or mistyped result array, or a verifier assessing one ID twice, is
+prompt omits, stay in findings as reported, so enabled verification assesses
+them, and are listed in a dropped audit event. A null or mistyped result array, or a verifier assessing one ID twice, is
 invalid output handled by the retry and failure policy. Verification retains original identity/location/source ownership and applies
 qualified assessment changes to clones. Categories cannot bypass an explicitly
 selected completeness gate. Failed attempts retain partial evidence without

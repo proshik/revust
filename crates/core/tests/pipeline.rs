@@ -735,7 +735,7 @@ fn unclaimed_synthesis_inputs_reach_verification_and_lifecycle_events_explain_ch
         .find(|e| matches!(e.kind, Kind::Dropped))
         .unwrap();
     assert_eq!(dropped.findings[0].id, "first-2");
-    assert!(dropped.text.contains("verification"), "{}", dropped.text);
+    assert!(dropped.text.contains("kept unchanged"), "{}", dropped.text);
     let verified = events
         .iter()
         .find(|e| matches!(e.kind, Kind::AgentDone) && e.agent == "verify src")
@@ -821,7 +821,11 @@ fn malformed_synthesis_arrays_fail_the_stage_instead_of_emptying_the_review() {
 }
 #[test]
 fn contradictory_verdicts_for_one_candidate_cannot_satisfy_strict_verification() {
-    for order in [["confirmed", "rejected"], ["rejected", "confirmed"]] {
+    for order in [
+        ["confirmed", "rejected"],
+        ["rejected", "confirmed"],
+        ["confirmed", "confirmed"],
+    ] {
         let d = definition(
             json!({"completeness":{"require_all_verified":true},"retries":{"verify":{"count":0}}}),
             &["a"],
@@ -839,4 +843,39 @@ fn contradictory_verdicts_for_one_candidate_cannot_satisfy_strict_verification()
         assert!(!r.policy_satisfied(), "{order:?}");
         assert_eq!(r.categories.findings[0].verdict, "unverified", "{order:?}");
     }
+}
+#[test]
+fn strict_verification_requires_verdicts_for_unclaimed_synthesis_inputs() {
+    let d = definition(
+        json!({"runtime":{"stagger_delay":"0s"},"completeness":{"require_all_verified":true}}),
+        &["first"],
+    );
+    let c = control(&d);
+    let b = backend(|call| {
+        Ok(match call.attempt.stage {
+            Stage::Find => json!({"findings":[
+            {"file":"src/a.rs","title":"kept"},
+            {"file":"src/a.rs","title":"unclaimed"}]}),
+            Stage::Synthesis => json!({"findings":[{"merged_ids":["first-1"],"file":"src/a.rs"}]}),
+            Stage::Verify => {
+                let mut ids = call
+                    .findings
+                    .iter()
+                    .map(|f| f.id.as_str())
+                    .collect::<Vec<_>>();
+                ids.sort_unstable();
+                assert_eq!(ids, ["first-1", "first-2"]);
+                json!({"verdicts":[{"id":"first-1","verdict":"confirmed"}]})
+            }
+        })
+    });
+    let r = pipeline::run(&d, &c, &b).unwrap();
+    assert!(!r.policy_satisfied());
+    let unclaimed = r
+        .categories
+        .findings
+        .iter()
+        .find(|f| f.id == "first-2")
+        .unwrap();
+    assert_eq!(unclaimed.verdict, "unverified");
 }

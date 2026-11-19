@@ -23,9 +23,11 @@ saved scope path names one (a missing copy is shown as unavailable); archives
 saved before this freeze are viewed from input/.
 
 A `dropped` event in events.jsonl lists synthesis inputs that no output
-claimed. Current writers also forward them unchanged to verification and the
-report; archives written before that change omitted them from both, so the same
-event there records a removal.
+claimed, as the finders reported them. Current writers keep those candidates in
+the synthesis findings, so they take part in verification when it is enabled
+and a verdict may then refine or reject them like any other candidate. Archives
+written before that change omitted them from verification and the report, so
+the same event there records a removal.
 
 Raw winning prompt documents (including frontmatter and whitespace) are frozen in
 `revust/prompt-snapshots.json` with path, layer, source and SHA-256. Extension-only

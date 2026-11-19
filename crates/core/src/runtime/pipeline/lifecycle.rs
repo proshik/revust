@@ -63,7 +63,7 @@ fn outcome_events(
             Kind::Dropped,
             name,
             &format!(
-                "Consolidation left {} candidates unclaimed; forwarded to verification as reported; {} had major or critical impact",
+                "Consolidation left {} candidates unclaimed; kept unchanged as findings; {} had major or critical impact",
                 result.dropped.len(),
                 urgent
             ),

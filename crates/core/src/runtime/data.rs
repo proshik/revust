@@ -223,7 +223,7 @@ pub fn verify(value: &Value, inputs: &[Finding]) -> Result<Vec<Finding>, String>
         // A repeated ID makes the outcome depend on response order.
         if patches.contains_key(&patch.id) {
             return Err(format!(
-                "verification assessed ID {} more than once",
+                "verification assessed ID {:?} more than once",
                 patch.id
             ));
         }
