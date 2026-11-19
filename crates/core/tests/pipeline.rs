@@ -914,3 +914,205 @@ fn malformed_stage_arrays_and_repeated_verdicts_are_retried_as_invalid_output() 
     }
     assert_eq!(r.categories.findings[0].verdict, "confirmed");
 }
+
+/// Records which native threads touch the backend once verification starts.
+struct Pooled<F> {
+    inner: Controlled<F>,
+    verifying: std::sync::atomic::AtomicBool,
+    threads: Mutex<std::collections::BTreeSet<String>>,
+}
+impl<F> Pooled<F> {
+    fn observe(&self) {
+        if self.verifying.load(Ordering::SeqCst) {
+            self.threads
+                .lock()
+                .unwrap()
+                .insert(format!("{:?}", std::thread::current().id()));
+        }
+    }
+    fn thread_count(&self) -> usize {
+        self.threads.lock().unwrap().len()
+    }
+}
+impl<F> Backend for Pooled<F>
+where
+    F: Fn(Call<'_>) -> Result<Value, AttemptFailure> + Sync,
+{
+    fn publish(&self, event: revust_core::runtime::events::Event) -> Result<(), String> {
+        if event.stage == "verify" {
+            self.verifying.store(true, Ordering::SeqCst);
+        }
+        self.observe();
+        self.inner.publish(event)
+    }
+    fn execute(&self, call: Call<'_>, run: &RunControl) -> Result<Value, AttemptFailure> {
+        self.observe();
+        self.inner.execute(call, run)
+    }
+    fn record(&self, event: Event<'_, Categories>) -> Result<(), String> {
+        self.observe();
+        self.inner.record(event)
+    }
+    fn wait(&self, d: Duration) {
+        self.observe();
+        self.inner.wait(d)
+    }
+    fn jitter(&self, bound: Duration) -> Duration {
+        self.inner.jitter(bound)
+    }
+}
+fn pooled<F: Fn(Call<'_>) -> Result<Value, AttemptFailure> + Sync>(execute: F) -> Pooled<F> {
+    Pooled {
+        inner: backend(execute),
+        verifying: false.into(),
+        threads: Mutex::new(Default::default()),
+    }
+}
+/// One finder reports one finding in each of `groups` directories, listed in
+/// reverse so group order differs from finder order.
+fn spread(groups: usize) -> Result<Value, AttemptFailure> {
+    Ok(
+        json!({"findings":(0..groups).rev().map(|n| json!({"file":format!("d{n}/f.rs"),"title":"t"})).collect::<Vec<_>>()}),
+    )
+}
+fn verify_policy(extra: Value) -> Value {
+    let mut policy = json!({
+        "stages":{"synthesis":{"enabled":false},"verify":{"parallelism":2}},
+        "runtime":{"max_parallel":4,"verify_groups":100},
+        "verification":{"min_directory_group_size":1},
+        "retries":{"verify":{"count":1,"conditions":["missing_output"],"delay":{"base":"0s","jitter":"0s"}}},
+    });
+    if let (Some(base), Value::Object(extra)) = (policy.as_object_mut(), extra) {
+        for (key, value) in extra {
+            base.insert(key, value);
+        }
+    }
+    policy
+}
+#[test]
+fn verification_groups_queue_behind_a_pool_bounded_by_stage_parallelism() {
+    const GROUPS: usize = 6;
+    let d = definition(verify_policy(json!({})), &["a"]);
+    let c = control(&d);
+    let active = AtomicUsize::new(0);
+    let peak = AtomicUsize::new(0);
+    let b = pooled(|call| match call.attempt.stage {
+        Stage::Find => spread(GROUPS),
+        Stage::Verify => {
+            let n = active.fetch_add(1, Ordering::SeqCst) + 1;
+            peak.fetch_max(n, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(5));
+            active.fetch_sub(1, Ordering::SeqCst);
+            if call.attempt.unit == "d2" && call.attempt.number == 0 {
+                return Err(AttemptFailure {
+                    kind: Failure::MissingOutput,
+                    diagnostic: "retry me".into(),
+                });
+            }
+            answer(call)
+        }
+        Stage::Synthesis => unreachable!("synthesis is disabled"),
+    });
+    let r = pipeline::run(&d, &c, &b).unwrap();
+    assert_eq!(r.state, State::Complete);
+    assert!(
+        b.thread_count() <= 2,
+        "{} threads served verification with parallelism 2",
+        b.thread_count()
+    );
+    assert!(peak.load(Ordering::SeqCst) <= 2);
+    let units = r
+        .units
+        .iter()
+        .filter(|u| u.attempts[0].id.stage == Stage::Verify)
+        .map(|u| (u.attempts[0].id.unit.as_str(), u.attempts.len()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        units,
+        [
+            ("d0", 1),
+            ("d1", 1),
+            ("d2", 2),
+            ("d3", 1),
+            ("d4", 1),
+            ("d5", 1)
+        ]
+    );
+    // d5 was reported first, so group order reverses the finder's IDs.
+    assert_eq!(
+        r.categories
+            .findings
+            .iter()
+            .map(|f| (f.id.clone(), f.verdict.as_str()))
+            .collect::<Vec<_>>(),
+        (1..=GROUPS)
+            .rev()
+            .map(|n| (format!("a-{n}"), "confirmed"))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(c.calls_spent(), 1 + GROUPS as u64 + 1);
+}
+#[test]
+fn verification_pool_is_capped_by_remaining_calls_and_stops_queued_groups() {
+    const GROUPS: usize = 5;
+    // Find spends one call, leaving two for six-wide verification.
+    let d = definition(
+        verify_policy(json!({
+            "budget":{"max_calls":3},
+            "stages":{"synthesis":{"enabled":false},"verify":{"parallelism":6}},
+            "runtime":{"max_parallel":8,"verify_groups":100},
+        })),
+        &["a"],
+    );
+    let c = control(&d);
+    let b = pooled(|call| match call.attempt.stage {
+        Stage::Find => spread(GROUPS),
+        _ => answer(call),
+    });
+    let r = pipeline::run(&d, &c, &b).unwrap();
+    assert_eq!(r.state, State::Stopped(StopReason::CallBudget));
+    assert!(
+        b.thread_count() <= 2,
+        "{} threads served verification with two remaining calls",
+        b.thread_count()
+    );
+    // The finder is the only unit outside verification.
+    assert_eq!(
+        r.units.len() - 1,
+        GROUPS,
+        "every queued group still reports an outcome"
+    );
+    assert_eq!(c.calls_spent(), 3);
+}
+#[test]
+fn cancellation_stops_queued_verification_groups_without_dispatching_them() {
+    const GROUPS: usize = 4;
+    let d = definition(
+        verify_policy(json!({"stages":{"synthesis":{"enabled":false},"verify":{"parallelism":1}}})),
+        &["a"],
+    );
+    let c = control(&d);
+    let b = pooled(|call| match call.attempt.stage {
+        Stage::Find => spread(GROUPS),
+        _ => {
+            if call.attempt.unit == "d1" {
+                c.cancel();
+            }
+            answer(call)
+        }
+    });
+    let r = pipeline::run(&d, &c, &b).unwrap();
+    assert_eq!(r.state, State::Stopped(StopReason::Cancelled));
+    assert!(b.thread_count() <= 1, "{} threads", b.thread_count());
+    let dispatched = b
+        .inner
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|a| a.stage == Stage::Verify)
+        .map(|a| a.unit.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(dispatched, ["d0", "d1"]);
+    assert_eq!(r.units.len() - 1, GROUPS);
+}

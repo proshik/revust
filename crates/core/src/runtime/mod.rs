@@ -137,6 +137,21 @@ impl RunControl {
     pub(crate) fn now(&self) -> Duration {
         self.0.clock.now()
     }
+    /// Upper bound on units of `stage` that could hold a slot at once: the
+    /// stage and global ceilings and the calls left. At least one, so queued
+    /// units can still report a stopped outcome.
+    pub(crate) fn dispatch_width(&self, stage: Stage) -> usize {
+        let state = self.0.state.lock().expect("run admission lock poisoned");
+        let calls = self.0.limits.max_calls.map_or(usize::MAX, |max| {
+            usize::try_from(max.saturating_sub(state.calls)).unwrap_or(usize::MAX)
+        });
+        self.0
+            .limits
+            .max_parallel
+            .min(self.0.limits.stage_parallel[stage.index()])
+            .min(calls)
+            .max(1)
+    }
     pub fn calls_spent(&self) -> u64 {
         self.0
             .state

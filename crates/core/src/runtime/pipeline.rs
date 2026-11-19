@@ -266,34 +266,26 @@ pub fn run(
             .flat_map(|group| &group.findings)
             .filter_map(|candidate| primary.iter().find(|f| f.id == candidate.id).cloned())
             .collect();
-        let verified = std::thread::scope(|scope| {
-            let handles: Vec<_> = groups
-                .iter()
-                .map(|group| {
-                    let retry = &retries[2];
-                    scope.spawn(move || {
-                        execute(
-                            control,
-                            backend,
-                            retry,
-                            super::Stage::Verify,
-                            &group.name,
-                            &format!("verify {}", group.shown),
-                            &group.keys.join(", "),
-                            &definition.verify,
-                            None,
-                            &group.findings,
-                            &[],
-                            &|| {},
-                        )
-                    })
-                })
-                .collect();
-            handles
-                .into_iter()
-                .map(|h| h.join().expect("verification worker panicked"))
-                .collect::<Vec<_>>()
-        });
+        let verified = pool(
+            control.dispatch_width(super::Stage::Verify),
+            &groups,
+            |group| {
+                execute(
+                    control,
+                    backend,
+                    &retries[2],
+                    super::Stage::Verify,
+                    &group.name,
+                    &format!("verify {}", group.shown),
+                    &group.keys.join(", "),
+                    &definition.verify,
+                    None,
+                    &group.findings,
+                    &[],
+                    &|| {},
+                )
+            },
+        );
         for unit in verified {
             if let Some(output) = output(&unit) {
                 report.verification_evidence.extend(output.findings.clone());
@@ -460,6 +452,35 @@ fn execute(
     lifecycle::finish(backend, control, stage, display_name, inputs, result)
 }
 
+/// Run `work` over a shared queue with at most `width` native threads, the
+/// caller included, and return results in item order. A refused spawn only
+/// narrows the pool: the remaining workers drain the queue.
+fn pool<T: Sync, R: Send>(width: usize, items: &[T], work: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let next = AtomicUsize::new(0);
+    let drain = || {
+        let mut done = Vec::new();
+        loop {
+            let index = next.fetch_add(1, Ordering::Relaxed);
+            let Some(item) = items.get(index) else {
+                break done;
+            };
+            done.push((index, work(item)));
+        }
+    };
+    let mut finished = std::thread::scope(|scope| {
+        let helpers: Vec<_> = (1..width.min(items.len()))
+            .map_while(|_| std::thread::Builder::new().spawn_scoped(scope, drain).ok())
+            .collect();
+        let mut finished = drain();
+        for helper in helpers {
+            finished.extend(helper.join().expect("verification worker panicked"));
+        }
+        finished
+    });
+    finished.sort_unstable_by_key(|(index, _)| *index);
+    finished.into_iter().map(|(_, result)| result).collect()
+}
 fn milliseconds(duration: Duration) -> i64 {
     i64::try_from(duration.as_millis()).unwrap_or(i64::MAX)
 }
