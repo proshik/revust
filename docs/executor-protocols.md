@@ -23,7 +23,8 @@ permission allow rules only in a workspace the user has already trusted.
 OpenCode uses isolated per-attempt configuration/HOME/XDG/TMPDIR and read-only
 review agent policy. A bare executable name resolves through revust's PATH as
 `which` does, skipping entries that are not regular files executable by the
-current user; a configured path containing `/` is probed as given. It accepts
+current user; a configured path containing `/` bypasses this lookup. The
+selected file is canonicalized before the version probe and dispatch. It accepts
 OpenCode 2.x (numeric major/minor/patch, including
 prerelease/build suffixes) and requires an explicit provider/model. Version output
 may be `opencode v2.minor.patch`, `v2.minor.patch` or `2.minor.patch`. Other majors,
