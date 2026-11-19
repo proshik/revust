@@ -15,6 +15,8 @@
 - The task inventory reads each task through one directory handle and reports
   non-UTF-8 round names instead of renaming them; a `task.md` link escaping its
   task directory is reported as a metadata error.
+- The Homebrew formula template replaces the package when installing over a
+  leftover keg instead of nesting it and binding helper interpreters twice.
 
 ## 0.1.8 — 2026-11-19
 
