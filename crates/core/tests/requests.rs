@@ -127,3 +127,34 @@ fn opencode_composes_explicit_model_and_isolated_json_for_each_stage() {
         );
     }
 }
+
+#[test]
+fn claude_reviewer_disables_hooks_from_reviewed_checkout_settings() {
+    for runner in ["claude", "claude/fixture-model:high"] {
+        let runner = Runner::parse(runner).unwrap();
+        for schema in [
+            "",
+            request::FINDER_SCHEMA,
+            request::SYNTHESIS_SCHEMA,
+            request::VERIFY_SCHEMA,
+        ] {
+            let req = request::compose(
+                &runner,
+                "body",
+                schema,
+                Path::new("/foreign/checkout"),
+                "read-only",
+            )
+            .unwrap();
+            let flags: Vec<_> = req
+                .argv
+                .iter()
+                .enumerate()
+                .filter(|(_, arg)| *arg == "--settings")
+                .collect();
+            assert_eq!(flags.len(), 1, "{:?}", req.argv);
+            let settings: Value = serde_json::from_str(&req.argv[flags[0].0 + 1]).unwrap();
+            assert_eq!(settings["disableAllHooks"], true);
+        }
+    }
+}

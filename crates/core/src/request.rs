@@ -11,6 +11,7 @@ pub const VERIFY_SCHEMA: &str = include_str!("../schemas/verify.json");
 // Authored guidance; command flags below are pinned provider protocol data.
 const NARRATION: &str = "\n\nProgress channel: briefly describe the evidence you are inspecting and report material discoveries or blockers as the investigation proceeds. Keep progress separate from the final structured result. Do not expose credentials or private environment values.\n";
 const JSON_OUTPUT: &str = "\n\nDeliver the final result as one JSON object. Use the field types and allowed values in the following schema, without Markdown fences or surrounding explanation.\nOutput schema (JSON):\n";
+const CLAUDE_FLAG_SETTINGS: &str = r#"{"disableAllHooks":true}"#;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Request {
@@ -70,6 +71,9 @@ impl Provider {
                     .map(str::to_owned),
                 );
                 args.pair("--setting-sources", "project");
+                // The project layer comes from the reviewed checkout, which may be a
+                // foreign branch; flag settings outrank it, so its hooks never run.
+                args.pair("--settings", CLAUDE_FLAG_SETTINGS);
                 args.0.extend(
                     [
                         "--disable-slash-commands",

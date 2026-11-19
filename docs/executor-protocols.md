@@ -14,6 +14,12 @@ chunks/UTF-8 boundaries. Rollout observations never select another session, rese
 an ended deadline or dispatch another provider. Owned process groups, descendant
 cleanup and fair nonblocking pumps enforce cancellation/idle/hard deadlines.
 
+Claude runs in the reviewed checkout and loads only its project setting layer,
+which may come from a foreign branch. A flag-level settings layer, which outranks
+it, disables all hooks, so that checkout's hooks never run on the reviewer's
+machine. Its other project settings still apply; Claude itself honours its
+permission allow rules only in a workspace the user has already trusted.
+
 OpenCode uses isolated per-attempt configuration/HOME/XDG/TMPDIR and read-only
 review agent policy. It accepts OpenCode 2.x (numeric major/minor/patch, including
 prerelease/build suffixes) and requires an explicit provider/model. Version output

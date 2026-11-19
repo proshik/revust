@@ -214,6 +214,48 @@ fn dry_run_applies_extension_executor_options_and_disabled_stages() {
 }
 
 #[test]
+fn dry_run_claude_setting_source_override_keeps_reviewed_checkout_hooks_disabled() {
+    let tree = Tree::new();
+    let config = tree.0.join(".revust");
+    fs::create_dir_all(config.join("tasks/task/run/input")).unwrap();
+    fs::write(config.join("tasks/task/run/input/scope.md"), "scope").unwrap();
+    fs::write(
+        config.join("extensions.json"),
+        r#"{"version":1,"policy":{"executors":{"claude":{"options":{"setting_sources":["project"]}}}}}"#,
+    )
+    .unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_revust"))
+        .current_dir(&tree.0)
+        .args([
+            "dry-run",
+            "--task=task",
+            "--run=run",
+            "--profile=claude-only",
+            "--config-dir=.revust",
+            "--no-tui",
+        ])
+        .env_clear()
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    let argv: Vec<&str> = result["find"][0]["request"]["argv"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|arg| arg.as_str().unwrap())
+        .collect();
+    let at = |flag| argv.iter().position(|arg| *arg == flag).unwrap() + 1;
+    assert_eq!(argv[at("--setting-sources")], "project");
+    let settings: serde_json::Value = serde_json::from_str(argv[at("--settings")]).unwrap();
+    assert_eq!(settings["disableAllHooks"], true);
+}
+
+#[test]
 fn dry_run_preserves_context_paths_and_plans_calibration_without_copying() {
     let tree = Tree::new();
     let input = tree.0.join("tasks/demo/first/input");
