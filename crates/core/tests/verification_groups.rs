@@ -103,3 +103,21 @@ fn merged_long_directory_labels_fit_prompt_basenames_and_remain_distinct() {
             .collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn labels_differing_only_by_case_stay_distinct_on_case_insensitive_filesystems() {
+    let groups = group(
+        &[finding("Src/one", "a"), finding("src/one", "b")],
+        false,
+        1,
+        None,
+    );
+    assert_eq!(
+        groups.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(),
+        ["Src", "src-2"]
+    );
+    assert_eq!(
+        groups.iter().map(|g| g.shown.as_str()).collect::<Vec<_>>(),
+        ["Src", "src-2"]
+    );
+}

@@ -43,6 +43,7 @@ fn label(keys: &[String]) -> String {
 }
 fn distinct(mut base: String, used: &mut BTreeSet<String>) -> String {
     // Labels are ASCII. Reserve room for collision counters and prompt suffixes.
+    // Compare without case: names become prompt files on case-insensitive volumes.
     base.truncate(160);
     (1_u64..)
         .map(|n| {
@@ -52,7 +53,7 @@ fn distinct(mut base: String, used: &mut BTreeSet<String>) -> String {
                 format!("{base}-{n}")
             }
         })
-        .find(|name| used.insert(name.clone()))
+        .find(|name| used.insert(name.to_ascii_lowercase()))
         .unwrap()
 }
 fn parent(file: &str) -> String {
