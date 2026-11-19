@@ -527,18 +527,22 @@ pub(crate) fn color(authored: &str, position: usize) -> Result<String, String> {
     ))
 }
 /// Finder names become archive file names, so they must stay distinct on
-/// case-insensitive volumes such as default APFS. Lowercasing the uppercase
-/// form approximates Unicode case folding (final sigma, sharp s) without a
-/// table dependency; normalization-equivalent spellings are not detected.
+/// case-insensitive volumes such as default APFS, which compares names after
+/// full Unicode case folding and normalization. Lowercase, uppercase, lowercase
+/// matches the default case folding without a table dependency;
+/// normalization-equivalent spellings are not detected.
 pub(crate) fn distinct_agent_names(agents: &[Agent]) -> Result<(), String> {
     let mut seen = BTreeMap::new();
     for agent in agents {
-        let folded = agent
-            .name
-            .chars()
-            .flat_map(char::to_uppercase)
-            .flat_map(char::to_lowercase)
-            .collect::<String>();
+        let mut folded = String::new();
+        for c in agent.name.chars().flat_map(char::to_lowercase) {
+            // Only Turkic folding joins dotless i with i; APFS keeps it distinct.
+            if c == '\u{131}' {
+                folded.push(c);
+            } else {
+                folded.extend(c.to_uppercase().flat_map(char::to_lowercase));
+            }
+        }
         match seen.insert(folded, &agent.name) {
             None => (),
             Some(previous) if *previous == agent.name => {

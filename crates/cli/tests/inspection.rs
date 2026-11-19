@@ -449,42 +449,37 @@ fn rosters_whose_names_differ_only_by_case_fail_before_a_round_exists() {
             "agents:\n  - name: {first}\n    lenses: [bugs]\n  - name: {second}\n    lenses: [tests]\n---\n{{{{SCOPE}}}}\n"
         )
     };
-    let write = |first: &str, second: &str| {
+    let write = |ordinary: [&str; 2], structured: [&str; 2]| {
         fs::write(
             config.join("prompts/profiles/pair.md"),
-            format!("---\nmodel: codex/test:high\n{}", roster(first, second)),
+            format!(
+                "---\nmodel: codex/test:high\n{}",
+                roster(ordinary[0], ordinary[1])
+            ),
         )
         .unwrap();
         fs::write(
             config.join("extension-profiles/pair.md"),
-            format!("---\nrunner:\n  executor: codex\n{}", roster(first, second)),
+            format!(
+                "---\nrunner:\n  executor: codex\n{}",
+                roster(structured[0], structured[1])
+            ),
         )
         .unwrap();
     };
-    let run = |extension: bool, arguments: &[&str]| {
-        fs::write(
-            config.join("extensions.json"),
-            if extension {
-                r#"{"version":1,"profiles":{"structured":{"file":"extension-profiles/pair.md"}}}"#
-            } else {
-                r#"{"version":1}"#
-            },
-        )
-        .unwrap();
+    fs::write(
+        config.join("extensions.json"),
+        r#"{"version":1,"profiles":{"structured":{"file":"extension-profiles/pair.md"}}}"#,
+    )
+    .unwrap();
+    let run = |profile: &str, arguments: &[&str]| {
         Command::new(env!("CARGO_BIN_EXE_revust"))
             .current_dir(&tree.0)
             .env_clear()
             .env("HOME", &tree.0)
             .args(arguments)
-            .args([
-                "--config-dir=.revust",
-                "--tasks-dir=tasks",
-                if extension {
-                    "--profile=structured"
-                } else {
-                    "--profile=pair"
-                },
-            ])
+            .args(["--config-dir=.revust", "--tasks-dir=tasks"])
+            .arg(format!("--profile={profile}"))
             .output()
             .unwrap()
     };
@@ -493,14 +488,22 @@ fn rosters_whose_names_differ_only_by_case_fail_before_a_round_exists() {
         &["dry-run", "--task=demo", "--run=first"],
         &["--task=demo", "--run=first", "--no-tui"],
     ];
-    write("Review", "review");
-    for extension in [false, true] {
+    // Each profile kind collides on its own, so neither loader masks the other.
+    let colliding = ["Review", "review"];
+    let distinct = ["Review", "logic"];
+    for (ordinary, structured, profile) in [
+        (colliding, distinct, "pair"),
+        (distinct, colliding, "structured"),
+    ] {
+        write(ordinary, structured);
         for command in commands {
-            let result = run(extension, command);
+            let result = run(profile, command);
             let stderr = String::from_utf8_lossy(&result.stderr);
-            assert!(!result.status.success(), "{command:?} accepted the roster");
+            assert!(!result.status.success(), "{command:?} accepted {profile}");
             assert!(
-                stderr.contains("\"Review\"") && stderr.contains("\"review\""),
+                stderr.contains(&format!(
+                    "profile {profile}: agent names \"Review\" and \"review\" differ only by case"
+                )),
                 "{command:?}: {stderr}"
             );
             assert!(result.stdout.is_empty());
@@ -514,10 +517,10 @@ fn rosters_whose_names_differ_only_by_case_fail_before_a_round_exists() {
         }
     }
     // Names that remain distinct after folding keep working.
-    write("Review", "logic");
-    for extension in [false, true] {
+    write(distinct, distinct);
+    for profile in ["pair", "structured"] {
         for command in &commands[..2] {
-            let result = run(extension, command);
+            let result = run(profile, command);
             assert!(
                 result.status.success(),
                 "{command:?}: {}",

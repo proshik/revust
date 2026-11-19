@@ -175,6 +175,7 @@ fn roster_names_must_differ_after_unicode_case_folding() {
         ("Ärger", "ärger"),
         ("οδοσ", "ΟΔΟς"),
         ("straße", "STRASSE"),
+        ("Straße", "STRAẞE"),
         ("\u{212a}elvin", "kelvin"),
     ] {
         let error = load(first, second).unwrap_err();
@@ -187,7 +188,8 @@ fn roster_names_must_differ_after_unicode_case_folding() {
         load("same", "same").unwrap_err(),
         "profile pair: duplicate agent name \"same\""
     );
-    // APFS keeps dotted capital I distinct from plain i.
+    // APFS keeps dotted capital I and dotless i distinct from plain i.
     load("İ", "i").unwrap();
+    load("i", "ı").unwrap();
     load("Review", "logic").unwrap();
 }
