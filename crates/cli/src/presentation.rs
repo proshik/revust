@@ -14,6 +14,15 @@ pub fn tty(enabled: bool) -> Option<File> {
         .flatten()
 }
 
+/// A terminal receives inert text; redirected output keeps the saved bytes.
+pub fn inert_on_terminal(text: String, terminal: bool) -> String {
+    if terminal {
+        revust_tui::wrap::text(&text)
+    } else {
+        text
+    }
+}
+
 pub fn style(status: &mut Status) {
     status.colors =
         std::env::var_os("NO_COLOR").is_none() && std::env::var("TERM").as_deref() != Ok("dumb");

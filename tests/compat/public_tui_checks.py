@@ -134,6 +134,38 @@ def hangup_session(root, args):
             child.kill(); child.communicate(timeout=5)
         if master is not None: os.close(master)
 
+def terminal_text(root):
+    """Saved text is inert on terminal stdout/stderr and unchanged when redirected."""
+    round = root / 'saved-control'; round.mkdir()
+    command = '\x1b]52;c;SAVED\x07'
+    outcome = {'state': 'failed', 'policy_failures': [], 'diagnostics': ['DIAGNOSTIC' + command]}
+    (round / 'manifest.json').write_text(json.dumps({'task': 'control', 'run': '01', 'finished_at': '2026-10-10T10:00:02Z', 'outcome': outcome}))
+    (round / 'findings.json').write_text(json.dumps({'outcome': outcome, 'scope': {'task': 'control', 'run': '01'},
+                                                   'findings': [{'id': 'c-1', 'title': 'TITLE' + command, 'severity': 'major'}]}))
+    (round / 'events.jsonl').write_text('')
+    view = [str(BINARY), 'view', '--archive', str(round), '--no-tui', '--markdown']
+    env = {'HOME': str(root), 'PATH': '/usr/bin:/bin', 'TERM': 'xterm-256color'}
+    master, slave = pty.openpty()
+    try:
+        child = subprocess.Popen(view, stdin=subprocess.DEVNULL, stdout=slave, stderr=slave, env=env)
+        os.close(slave); slave = None
+        screen = bytearray()
+        while True:
+            try: chunk = os.read(master, 65536)
+            except OSError: break
+            if not chunk: break
+            screen.extend(chunk)
+        assert child.wait(timeout=5) == 2
+    finally:
+        if slave is not None: os.close(slave)
+        os.close(master)
+    assert b'TITLE' in screen and b'DIAGNOSTIC' in screen, bytes(screen)
+    assert b'\x1b' not in screen and b'\x07' not in screen, bytes(screen)
+    redirected = subprocess.run(view, env=env, capture_output=True, timeout=5)
+    assert redirected.returncode == 2
+    assert ('TITLE' + command).encode() in redirected.stdout, redirected.stdout
+    assert ('DIAGNOSTIC' + command).encode() in redirected.stderr, redirected.stderr
+
 def main():
     with tempfile.TemporaryDirectory(prefix='revust-public-tui-') as directory:
         root = Path(directory)
@@ -212,7 +244,8 @@ def main():
         result = session(root, [a.replace('--run=01','--run=04') for a in args] + ['--auto-exit=1s'], lambda until, send, resize, remain: until(b'FINDING_MARKER'))
         assert result['code'] == 1 and time.monotonic() - started >= .9, result
         incomplete_countdown(root, provider, answer, args)
-    print('Twenty-two public PTY scenarios passed: thirteen review/archive/cancellation cases and nine failed/stopped/policy-failed countdown cases')
+        terminal_text(root)
+    print('Twenty-three public PTY scenarios passed: fourteen review/archive/cancellation/terminal-text cases and nine failed/stopped/policy-failed countdown cases')
 
 def incomplete_countdown(root, provider, answer, args):
     for kind in ['failed', 'stopped', 'policy-failed']:

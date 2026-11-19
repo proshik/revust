@@ -168,7 +168,11 @@ pub fn run(plan: ExecutionPlan, markdown: bool, options: Options) -> Result<i32,
         return Ok(code);
     }
     let output = if markdown {
-        result.report.markdown()
+        use std::io::IsTerminal;
+        revust::presentation::inert_on_terminal(
+            result.report.markdown(),
+            io::stdout().is_terminal(),
+        )
     } else {
         result.report.json()?
     };

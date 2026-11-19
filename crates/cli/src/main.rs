@@ -2,14 +2,16 @@ mod review;
 use revust_core::config::catalog::Catalog;
 use revust_core::config::runtime::{Invocation, RuntimeConfig};
 use revust_core::plan::PromptPlan;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 const HELP: &str = "revust --task NAME --run NAME [--no-tui] [OPTIONS]\nrevust config [OPTIONS]\nrevust config --runtime-only [OPTIONS]\nrevust config --effective [OPTIONS]\nrevust config --extension-schema\nrevust dry-run --task NAME --run NAME [OPTIONS]\nrevust view --archive PATH [--no-tui] [--markdown]\nrevust --dump-defaults PATH\nrevust init [--config-dir PATH]\nrevust new --task NAME --run NAME [--tasks-dir PATH]\nrevust stats [--tasks-dir PATH] [--task NAME]\nrevust cleanup --task NAME [--tasks-dir PATH]\n\nconfig prints the legacy catalogue; --effective includes extension policy and\nnew profiles. --runtime-only inspects INI settings and paths without prompts.\n--extension-schema exports the version 1 JSON schema.\ndry-run prepares finder requests and deferred stage templates, including\ncontext and prior-round history. view reads saved results without current profiles.\nConfiguration inspection, dry-run and view are read-only.\n--dump-defaults exports embedded prompts, preserving existing entries.\ninit (--init) writes resolved prompts and a config template into ./.revust/.\n\nPaths: --config-dir PATH, --workdir PATH, --task NAME, --run NAME\nInformation: --help (-h), --version\nSettings: --idle-timeout DURATION, --hard-timeout DURATION,\n          --stagger-delay DURATION, --auto-exit DURATION,\n          --max-parallel N, --verify-groups N, --verify-group-by dir|source,\n          --tasks-dir PATH, --profile NAME, --codex-sandbox MODE\nreview/dry-run: --lenses NAME,NAME, --no-synthesis, --no-verify,\n                --min-confidence INTEGER, --preserve-anthropic-api-key\n";
 
 fn main() {
     if let Err(error) = run() {
         // The terminal itself may have disappeared; a diagnostic write failure
-        // must not replace the tool's error status with a panic.
+        // must not replace the tool's error status with a panic. Saved
+        // diagnostics are data, so a terminal never interprets them.
+        let error = revust::presentation::inert_on_terminal(error, io::stderr().is_terminal());
         let _ = writeln!(io::stderr().lock(), "error: {error}");
         std::process::exit(2);
     }
@@ -243,7 +245,6 @@ fn view_archive(path: &std::path::Path, no_tui: bool, markdown: bool) -> Result<
         })
         .map_err(|e| e.to_string())?;
         let report = view.model.report.as_ref().ok_or("missing saved report")?;
-        use std::io::IsTerminal;
         if !io::stdout().is_terminal() {
             let output = if markdown {
                 report.markdown()
@@ -259,7 +260,7 @@ fn view_archive(path: &std::path::Path, no_tui: bool, markdown: bool) -> Result<
     }
     let saved = revust_core::archive::reader::load(path)?;
     let output = if markdown {
-        saved.report.markdown()
+        revust::presentation::inert_on_terminal(saved.report.markdown(), io::stdout().is_terminal())
     } else {
         saved.report.json()?
     };
