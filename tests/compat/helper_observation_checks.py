@@ -195,9 +195,10 @@ print((root/'effective.json').read_text())
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn('exists: false\nrounds: none',result.stdout,task)
 
-    def test_read_only_helpers_do_not_write_bytecode_into_their_installation(self):
+    def test_helpers_do_not_write_bytecode_into_their_installation(self):
         installed=self.root/'installed/scripts';installed.mkdir(parents=True)
-        names=sorted(['helper_common.py','inspect-config.py','analyze-corpus.py','preflight.sh','task-state.sh'])
+        names=sorted(['helper_common.py','inspect-config.py','analyze-corpus.py','preflight.sh','task-state.sh',
+                      'host-launch.py','guild-launch.py'])
         for name in names:
             shutil.copy2(ROOT/'scripts'/name,installed/name)
         self.config.write_text(json.dumps(self.value))
@@ -209,6 +210,16 @@ print((root/'effective.json').read_text())
             result=subprocess.run(list(map(str,command)),cwd=self.root,env={**self.environment,'PYTHONPYCACHEPREFIX':str(prefix)},
                                   capture_output=True,text=True,timeout=15)
             self.assertEqual(result.returncode,0,(command,result.stderr))
+            self.assertEqual(sorted(path.name for path in installed.iterdir()),names,command)
+            self.assertEqual([path for path in prefix.rglob('helper_common*')],[],command)
+        # Launchers import the same helper; a refused start exercises that import
+        # without a terminal host or provider.
+        for launcher in ['host-launch.py','guild-launch.py']:
+            command=[sys.executable,installed/launcher,str(self.program),'--no-tui']
+            result=subprocess.run(list(map(str,command)),cwd=self.root,env={**self.environment,'PYTHONPYCACHEPREFIX':str(prefix)},
+                                  capture_output=True,text=True,timeout=15)
+            self.assertNotEqual(result.returncode,0,(command,result.stderr))
+            self.assertTrue(result.stderr.startswith('error: '),(command,result.stderr))
             self.assertEqual(sorted(path.name for path in installed.iterdir()),names,command)
             self.assertEqual([path for path in prefix.rglob('helper_common*')],[],command)
 

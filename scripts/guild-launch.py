@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
+sys.dont_write_bytecode = True  # Importing the local helper must not write its cache.
 from helper_common import FORWARDED, safe
 
 FINAL = {'exited', 'interrupted', 'failed_to_start'}

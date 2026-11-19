@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import uuid
+sys.dont_write_bytecode = True  # Importing the local helper must not write its cache.
 from helper_common import FORWARDED, HelperError, executable, mask_proxy_values, safe
 
 HERE = Path(__file__).resolve().parent
