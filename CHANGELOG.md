@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The Homebrew formula template installs only the files listed in the release
+  archive's SHA256SUMS, so Homebrew's build-time HOME no longer lands in
+  `libexec` and repeated installs record identical sums.
+
 ## 0.1.9 — 2026-11-20
 
 - Keep verification group prompt names distinct on case-insensitive volumes.
