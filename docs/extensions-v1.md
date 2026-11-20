@@ -20,7 +20,7 @@ model and effort, plus agents and stages; agent names follow the ordinary profil
 
 | Policy object | Fields |
 | --- | --- |
-| runtime | idle_timeout, hard_timeout, stagger_delay, max_parallel, verify_groups, verify_group_by, codex_sandbox |
+| runtime | idle_timeout, hard_timeout, stagger_delay, max_parallel, verify_groups, verify_group_by, codex_sandbox, keep_awake |
 | stages.find/synthesis/verify | idle_timeout, hard_timeout, parallelism; synthesis/verify also enabled |
 | retries.find/synthesis/verify | count, conditions, delay: base, factor, max, jitter |
 | verification | min_directory_group_size, min_confidence |
@@ -37,6 +37,16 @@ confidence 0-100, finite delay factor at least one. Per-layer stage policy refin
 that layer's global settings; a later global assignment can override it. Order:
 defaults, user INI/extensions/profile policy, project INI/extensions/profile policy,
 invocation. Explicit overall parallelism remains a ceiling.
+
+runtime.keep_awake is a boolean with no INI key or flag. When it is absent or
+true, a macOS review run holds an idle-sleep assertion through
+`/usr/bin/caffeinate -i -w PID` until the run ends; false disables it.
+`config --effective` reports it only once a layer assigns it. See
+[CLI workflows](usage.md) for the limits of this protection.
+
+```json
+{"version":1,"policy":{"runtime":{"keep_awake":false}}}
+```
 
 Default find/synthesis permit one retry for failed delivery; verify permits none.
 A delivered invalid answer is not retried unless invalid_output is explicitly

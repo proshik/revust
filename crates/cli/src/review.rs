@@ -12,6 +12,7 @@ use std::{
     },
     time::Duration,
 };
+mod keep_awake;
 mod progress;
 mod signals;
 
@@ -48,6 +49,7 @@ pub fn run(plan: ExecutionPlan, markdown: bool, options: Options) -> Result<i32,
     let confidence = policy["verification"]["min_confidence"]
         .as_i64()
         .ok_or("missing confidence threshold")?;
+    let keep_awake = policy["runtime"]["keep_awake"] != false;
     let control = RunControl::new(
         Limits::from_policy(&plan.definition().policy)?,
         Arc::new(MonotonicClock::default()),
@@ -60,6 +62,8 @@ pub fn run(plan: ExecutionPlan, markdown: bool, options: Options) -> Result<i32,
     let random = AtomicU64::new(u64::from_ne_bytes(seed).max(1));
     let scope = plan.scope();
     let archive = Archive::claim(plan.tasks_dir(), &scope.task, &scope.run)?;
+    // Dropped after providers have stopped and the outcome is saved.
+    let _awake = keep_awake::KeepAwake::start(keep_awake);
     let journal = archive.journal(Identity {
         task: scope.task.clone(),
         run: scope.run.clone(),

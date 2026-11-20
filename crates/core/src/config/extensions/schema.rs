@@ -82,6 +82,7 @@ pub(super) fn policy() -> Rule {
                 ("verify_groups", positive()),
                 ("verify_group_by", choice(&["dir", "source"])),
                 ("codex_sandbox", sandbox()),
+                ("keep_awake", Rule::Bool),
             ]),
         ),
         (

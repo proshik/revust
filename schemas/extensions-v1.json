@@ -508,6 +508,9 @@
               "x-allow-zero": true,
               "x-minimum-nanoseconds": 0
             },
+            "keep_awake": {
+              "type": "boolean"
+            },
             "max_parallel": {
               "maximum": 18446744073709551615,
               "minimum": 1,
@@ -1155,6 +1158,9 @@
                     "type": "string",
                     "x-allow-zero": true,
                     "x-minimum-nanoseconds": 0
+                  },
+                  "keep_awake": {
+                    "type": "boolean"
                   },
                   "max_parallel": {
                     "maximum": 18446744073709551615,

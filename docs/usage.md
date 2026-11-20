@@ -36,6 +36,18 @@ the saved archive for JSON/Markdown evidence. Incomplete terminal results honor
 `--auto-exit` while displaying incomplete status; zero waits and any key cancels
 the countdown. A persistence error never announces durable completion.
 
+On macOS a review run keeps the Mac awake while it executes: after the round is
+claimed revust starts `/usr/bin/caffeinate -i -w PID` for its own process and
+stops it when the run ends, including failure, cancellation or an
+interrupt; `-w` ends the helper if revust exits without cleaning up. Only idle
+sleep is prevented: closing the lid on battery power, or an explicit sleep
+request, still suspends the Mac and stalls providers. Launchers run the same
+review process, so launched reviews are covered too. If the helper is missing
+or cannot start, one `warning: keep awake:` line goes to stderr and the review
+continues; reports and archives are unchanged. Inspection, `new`, `dry-run`,
+`view` and `stats` never start it. Disable it with policy `runtime.keep_awake`
+set to false in a user or project `extensions.json`; see [extensions](extensions-v1.md).
+
 `view --archive DIRECTORY` opens saved evidence without running any provider or
 loading today's profiles. --no-tui returns JSON, with --markdown for prose. View
 success does not reuse the original review's finding exit code. Quitting the TUI
