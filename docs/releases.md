@@ -50,8 +50,12 @@ Preserve the full package in `libexec` and expose the executable through `bin`.
 Bind interpreter paths to the declared dependency during installation, retain
 the original package sums and regenerate installed-file sums. Do both in the
 staged package and replace any existing `libexec`, so installing over a
-leftover keg gives the same result as a clean install. Keep package
-README/license/changelog in `libexec` as well as Homebrew's prefix metadata.
+leftover keg gives the same result as a clean install. Take the package file
+list from the archive's `SHA256SUMS`, not from the build directory, which also
+holds Homebrew's build-time HOME (`.brew_home`); `libexec` then holds only the
+release files and both sums files, and repeated installs record identical
+sums. Keep package README/license/changelog in `libexec` as well as Homebrew's
+prefix metadata.
 
 Before publication, run style/audit, a meaningful `brew test` and disposable
 installation from the exact candidate archive. Exercise reinstall, upgrade,

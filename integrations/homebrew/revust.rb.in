@@ -26,12 +26,14 @@ class Revust < Formula
     end
     # Homebrew binds script interpreters; retain download sums and record installed sums.
     mv "SHA256SUMS", "SOURCE_SHA256SUMS"
-    files = Dir.glob("**/*", File::FNM_DOTMATCH).select { |file| File.file?(file) }.sort
+    # The build directory also holds Homebrew's own HOME; package only the release files.
+    files = File.readlines("SOURCE_SHA256SUMS", chomp: true).map { |line| line.split("  ", 2).fetch(1) }
+    files = (files + ["SOURCE_SHA256SUMS"]).sort
     File.write "SHA256SUMS", files.map { |file| "#{Digest::SHA256.file(file).hexdigest}  #{file}\n" }.join
     # An install over an existing keg must replace the package, not merge into it.
     rm_r libexec if libexec.exist?
     # Keep helpers, build receipt, documentation and all licence notices together.
-    libexec.install Pathname.pwd.children
+    libexec.install (files + ["SHA256SUMS"]).map { |file| file.split("/").first }.uniq
     # Supplying prefix metadata prevents Homebrew from moving it out of libexec.
     cp [libexec/"README.md", libexec/"LICENSE", libexec/"CHANGELOG.md"], prefix
     bin.install_symlink libexec/"bin/revust"
@@ -89,6 +91,11 @@ class Revust < Formula
     end
     cd libexec do
       system "/usr/bin/shasum", "-a", "256", "-c", "SHA256SUMS"
+      # The package holds only the release files plus both sums files.
+      listed = ->(sums) { File.readlines(sums, chomp: true).map { |line| line.split("  ", 2).fetch(1) } }
+      assert_empty listed["SHA256SUMS"] - listed["SOURCE_SHA256SUMS"] - ["SOURCE_SHA256SUMS"]
+      packaged = Dir.glob("**/*", File::FNM_DOTMATCH).reject { |path| File.directory?(path) }
+      assert_empty packaged - listed["SHA256SUMS"] - ["SHA256SUMS"]
     end
   end
 end
