@@ -17,6 +17,9 @@
   task directory is reported as a metadata error.
 - The Homebrew formula template replaces the package when installing over a
   leftover keg instead of nesting it and binding helper interpreters twice.
+- On macOS a review run keeps the Mac from idle sleep through
+  `/usr/bin/caffeinate -i -w PID` until the run ends; policy
+  `runtime.keep_awake: false` disables it, and a missing helper is one warning.
 
 ## 0.1.8 — 2026-11-19
 
