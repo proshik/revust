@@ -70,7 +70,15 @@ def session(root, args, interaction, *, terminal_stdout=False):
                 break
             assert time.monotonic() < deadline, 'command did not return'
         result = json.loads(child.stdout.readline())
-        assert termios.tcgetattr(slave) == before, 'terminal modes were not restored'
+        # macOS reports PENDIN after the canonical-mode restore until the next
+        # terminal read, here the child's acknowledgement read. Require exact
+        # restoration within a bounded wait.
+        deadline = time.monotonic() + 1
+        after = termios.tcgetattr(slave)
+        while after != before and time.monotonic() < deadline:
+            time.sleep(.01)
+            after = termios.tcgetattr(slave)
+        assert after == before, ('terminal modes were not restored', args, before, after)
         after_tui = bytes(screen).split(b'\x1b[?1049l', 1)[1]
         send(b'ack\n'); until(b'ack\r\n')
         child.communicate(timeout=5)
