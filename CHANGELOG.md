@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.9 — 2026-11-20
 
 - Keep verification group prompt names distinct on case-insensitive volumes.
 - `config --effective`, dry-run and review reject a required reviewer missing
