@@ -410,6 +410,86 @@ fn providers_file_converts_opencode_jsonc_with_comments_and_trailing_commas() {
 }
 
 #[test]
+fn providers_file_moves_model_level_variants_into_settings() {
+    let tmp = Temp::new();
+    let capture = tmp.0.join("captured");
+    let bin = capture_script(&tmp.0, response());
+    let file = tmp.0.join("opencode-variants.jsonc");
+    fs::write(
+        &file,
+        r#"{
+        "provider": {
+            "ecom": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "Ecom",
+                "options": {"baseURL": "https://llm.example.invalid/v1"},
+                "models": {
+                    "deepseek-v4.1-flash": {
+                        "name": "DeepSeek Flash",
+                        "limit": {"context": 384000, "output": 32768},
+                        "options": {"maxTokens": 32768, "temperature": 0.2},
+                        "variants": {
+                            "high": {"reasoningEffort": "high"},
+                            "low": {"reasoningEffort": "low"}
+                        },
+                    },
+                    "glm-5.3-flash": {
+                        "options": {"maxTokens": 8, "variants": {"fast": {"temperature": 0.1}}},
+                        "variants": {"fast": {"temperature": 0.4}, "slow": {"temperature": 0.9}},
+                    },
+                },
+            },
+        },
+    }"#,
+    )
+    .unwrap();
+    let mut settings = settings(bin);
+    settings
+        .environment
+        .insert("REVUST_CAPTURE".into(), capture.to_str().unwrap().into());
+    let root = tmp.0.join("private");
+    let session = Session::prepare(
+        &root,
+        &settings,
+        &json!({"providers_file": file.to_str().unwrap()}),
+    )
+    .unwrap();
+    let result = session
+        .run(request(&tmp.0), &control(), |_, _| Ok(()), |_| {})
+        .unwrap();
+    assert!(result.process.status.unwrap().success());
+    let config = captured_config(&capture);
+    let ecom = &config["providers"]["ecom"];
+    // Model-level variants land inside settings; limit, name and the
+    // converted options stay on the model untouched.
+    let flash = &ecom["models"]["deepseek-v4.1-flash"];
+    assert_eq!(
+        flash,
+        &json!({
+            "name": "DeepSeek Flash",
+            "limit": {"context": 384000, "output": 32768},
+            "settings": {
+                "maxTokens": 32768,
+                "temperature": 0.2,
+                "variants": {
+                    "high": {"reasoningEffort": "high"},
+                    "low": {"reasoningEffort": "low"}
+                }
+            }
+        })
+    );
+    assert!(flash.get("variants").is_none());
+    // Variants arriving through options merge with model-level ones
+    // without losing keys; the model-level entry wins on a conflict.
+    let glm = &ecom["models"]["glm-5.3-flash"];
+    assert_eq!(
+        glm["settings"]["variants"],
+        json!({"fast": {"temperature": 0.4}, "slow": {"temperature": 0.9}})
+    );
+    assert!(glm.get("variants").is_none());
+}
+
+#[test]
 fn providers_file_refuses_missing_files_unknown_npm_and_unqualified_packages() {
     for (name, file, expected) in [
         ("missing", None, "providers file"),

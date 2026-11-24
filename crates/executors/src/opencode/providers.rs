@@ -133,8 +133,9 @@ pub fn resolve_path(text: &str) -> io::Result<PathBuf> {
 }
 
 /// Convert opencode.jsonc provider entries: npm maps to a native package,
-/// options become settings at provider and model level, and
-/// enabled_providers filters entries when present.
+/// options become settings at provider and model level, model-level
+/// variants move into settings, and enabled_providers filters entries
+/// when present.
 fn convert(provider: &Value, enabled: Option<&Value>) -> io::Result<Value> {
     let entries = provider
         .as_object()
@@ -197,8 +198,33 @@ fn convert(provider: &Value, enabled: Option<&Value>) -> io::Result<Value> {
                 if let Some(options) = definition.get("options") {
                     converted_model["settings"] = options.clone();
                 }
+                // OpenCode 2.x rejects a model-level `variants` key and drops
+                // the whole provider ("configuration normalization
+                // diagnostic"), so move variants into `settings`, where they
+                // are accepted. Merge with any variants that arrived through
+                // `options` so neither set of keys is lost; a model-level
+                // variant wins on a name conflict because the model level is
+                // where opencode.jsonc declares them.
+                if let Some(variants) = definition.get("variants").and_then(Value::as_object)
+                    && let Some(model) = converted_model.as_object_mut()
+                {
+                    let settings = model.entry("settings").or_insert_with(|| json!({}));
+                    if let Some(settings) = settings.as_object_mut() {
+                        let existing = settings
+                            .entry("variants")
+                            .or_insert_with(|| Value::Object(variants.clone()));
+                        if let Some(existing) = existing.as_object_mut() {
+                            for (name, variant) in variants {
+                                existing.insert(name.clone(), variant.clone());
+                            }
+                        } else {
+                            *existing = Value::Object(variants.clone());
+                        }
+                    }
+                }
                 if let Some(model) = converted_model.as_object_mut() {
                     model.remove("options");
+                    model.remove("variants");
                 }
                 converted_models[model] = converted_model;
             }
