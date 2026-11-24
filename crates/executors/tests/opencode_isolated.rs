@@ -437,6 +437,13 @@ fn providers_file_moves_model_level_variants_into_settings() {
                         "options": {"maxTokens": 8, "variants": {"fast": {"temperature": 0.1}}},
                         "variants": {"fast": {"temperature": 0.4}, "slow": {"temperature": 0.9}},
                     },
+                    "variants-only": {
+                        "variants": {"fast": {"temperature": 0.3}},
+                    },
+                    "scalar-options": {
+                        "options": "broken",
+                        "variants": {"fast": {"temperature": 0.5}},
+                    },
                 },
             },
         },
@@ -483,10 +490,27 @@ fn providers_file_moves_model_level_variants_into_settings() {
     // without losing keys; the model-level entry wins on a conflict.
     let glm = &ecom["models"]["glm-5.3-flash"];
     assert_eq!(
-        glm["settings"]["variants"],
-        json!({"fast": {"temperature": 0.4}, "slow": {"temperature": 0.9}})
+        glm,
+        &json!({
+            "settings": {
+                "maxTokens": 8,
+                "variants": {"fast": {"temperature": 0.4}, "slow": {"temperature": 0.9}}
+            }
+        })
     );
     assert!(glm.get("variants").is_none());
+    // Without options the model gains a freshly created settings object
+    // holding exactly the model-level variants.
+    assert_eq!(
+        ecom["models"]["variants-only"],
+        json!({"settings": {"variants": {"fast": {"temperature": 0.3}}}})
+    );
+    // A non-object settings value is replaced instead of dropping the
+    // variant definitions.
+    assert_eq!(
+        ecom["models"]["scalar-options"],
+        json!({"settings": {"variants": {"fast": {"temperature": 0.5}}}})
+    );
 }
 
 #[test]

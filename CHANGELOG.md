@@ -5,7 +5,8 @@
 - OpenCode providers files convert a model-level `variants` entry into the
   model's `settings` (merging with variants that arrived through `options`)
   instead of leaving it in place, where OpenCode 2.x rejects the whole
-  provider.
+  provider. A non-object model `settings` value is replaced so the variant
+  definitions are never dropped silently.
 - The Homebrew formula template installs only the files listed in the release
   archive's SHA256SUMS, so Homebrew's build-time HOME no longer lands in
   `libexec` and repeated installs record identical sums.

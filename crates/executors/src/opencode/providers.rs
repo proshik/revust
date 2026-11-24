@@ -209,17 +209,22 @@ fn convert(provider: &Value, enabled: Option<&Value>) -> io::Result<Value> {
                     && let Some(model) = converted_model.as_object_mut()
                 {
                     let settings = model.entry("settings").or_insert_with(|| json!({}));
-                    if let Some(settings) = settings.as_object_mut() {
-                        let existing = settings
-                            .entry("variants")
-                            .or_insert_with(|| Value::Object(variants.clone()));
-                        if let Some(existing) = existing.as_object_mut() {
-                            for (name, variant) in variants {
-                                existing.insert(name.clone(), variant.clone());
-                            }
-                        } else {
-                            *existing = Value::Object(variants.clone());
+                    // A non-object settings (for example a scalar options
+                    // value copied verbatim) cannot hold variants; replace it
+                    // rather than silently dropping the variant definitions.
+                    if !settings.is_object() {
+                        *settings = json!({});
+                    }
+                    let settings = settings.as_object_mut().expect("settings is an object");
+                    let existing = settings
+                        .entry("variants")
+                        .or_insert_with(|| Value::Object(variants.clone()));
+                    if let Some(existing) = existing.as_object_mut() {
+                        for (name, variant) in variants {
+                            existing.insert(name.clone(), variant.clone());
                         }
+                    } else {
+                        *existing = Value::Object(variants.clone());
                     }
                 }
                 if let Some(model) = converted_model.as_object_mut() {
