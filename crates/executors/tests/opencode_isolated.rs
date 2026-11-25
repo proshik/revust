@@ -434,7 +434,13 @@ fn providers_file_moves_model_level_variants_into_settings() {
                         },
                     },
                     "glm-5.3-flash": {
-                        "options": {"maxTokens": 8, "variants": {"fast": {"temperature": 0.1}}},
+                        "options": {
+                            "maxTokens": 8,
+                            "variants": {
+                                "fast": {"temperature": 0.1},
+                                "medium": {"temperature": 0.6}
+                            }
+                        },
                         "variants": {"fast": {"temperature": 0.4}, "slow": {"temperature": 0.9}},
                     },
                     "variants-only": {
@@ -494,7 +500,11 @@ fn providers_file_moves_model_level_variants_into_settings() {
         &json!({
             "settings": {
                 "maxTokens": 8,
-                "variants": {"fast": {"temperature": 0.4}, "slow": {"temperature": 0.9}}
+                "variants": {
+                    "fast": {"temperature": 0.4},
+                    "medium": {"temperature": 0.6},
+                    "slow": {"temperature": 0.9}
+                }
             }
         })
     );

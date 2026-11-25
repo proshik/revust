@@ -2,11 +2,11 @@
 
 ## Unreleased
 
-- OpenCode providers files convert a model-level `variants` entry into the
-  model's `settings` (merging with variants that arrived through `options`)
-  instead of leaving it in place, where OpenCode 2.x rejects the whole
-  provider. A non-object model `settings` value is replaced so the variant
-  definitions are never dropped silently.
+- When loading an `opencode.jsonc` document through `providers_file`, revust
+  moves a model-level `variants` object into the model's `settings` and merges
+  it with variants supplied through `options`. This keeps OpenCode 2.x from
+  rejecting the provider because of the model-level key. When moving a
+  `variants` object, revust replaces any non-object model `settings` value.
 - The Homebrew formula template installs only the files listed in the release
   archive's SHA256SUMS, so Homebrew's build-time HOME no longer lands in
   `libexec` and repeated installs record identical sums.

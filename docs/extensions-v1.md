@@ -71,14 +71,16 @@ env JSON. A leading ~ expands to HOME; relative paths resolve from the revust
 working directory. The file may hold a {"providers":{...}} wrapper, an
 opencode.jsonc document or a bare provider-ID map. opencode.jsonc entries
 convert as follows: npm "@ai-sdk/openai-compatible" becomes the native package
-"@opencode/ai/providers/openai-compatible" (any other npm name fails), options
-become settings on the provider and its models, a model-level variants object
-moves into the model's settings (merged with variants that arrived through
-options; a model-level variant wins on a name conflict), and
-enabled_providers filters entries when present. Comments and trailing commas
-are accepted; an
-unterminated block comment fails. An empty providers_file value disables an
-inherited path. A
+"@opencode/ai/providers/openai-compatible" (any other npm name fails), `options`
+become `settings` on the provider and its models, and `enabled_providers`
+filters entries when present. A model-level `variants` object moves into the
+model's `settings` and merges with variants supplied through `options`. A
+model-level variant wins on a name conflict. When moving a `variants` object,
+revust discards any non-object model `settings` value, including one copied from
+`options`, and creates a settings object to hold the variants.
+
+Comments and trailing commas are accepted. An unterminated block comment fails.
+An empty providers_file value disables an inherited path. A
 {file:~/...} secret reference expands to an absolute path against the revust
 HOME, because the isolated child receives a fresh HOME; the value stays a
 file reference that OpenCode itself reads. File providers
