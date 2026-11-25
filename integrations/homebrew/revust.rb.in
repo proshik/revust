@@ -29,7 +29,7 @@ class Revust < Formula
     # The build directory also holds Homebrew's own HOME; package only the release files.
     files = File.readlines("SOURCE_SHA256SUMS", chomp: true).map { |line| line.split("  ", 2).fetch(1) }
     files = (files + ["SOURCE_SHA256SUMS"]).sort
-    File.write "SHA256SUMS", files.map { |file| "#{Digest::SHA256.file(file).hexdigest}  #{file}\n" }.join
+    File.write "SHA256SUMS", files.map { |file| "#{Digest::SHA256.file(file)}  #{file}\n" }.join
     # An install over an existing keg must replace the package, not merge into it.
     rm_r libexec if libexec.exist?
     # Keep helpers, build receipt, documentation and all licence notices together.
