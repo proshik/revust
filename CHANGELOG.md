@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.10 — 2026-11-25
 
 - When loading an `opencode.jsonc` document through `providers_file`, revust
   moves a model-level `variants` object into the model's `settings` and merges
