@@ -215,6 +215,8 @@
     "docs/executor-protocols.md",
     "docs/extensions-v1.md",
     "docs/hosts.md",
+    "docs/images/tui-findings.png",
+    "docs/images/tui-navigation.gif",
     "docs/installation.md",
     "docs/local-packaging.md",
     "docs/releases.md",

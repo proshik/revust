@@ -11,6 +11,11 @@ OpenCode CLIs. It runs finding, synthesis and verification stages, saves the
 inputs and outcomes, and lets you inspect results in a terminal or as JSON/Markdown.
 Reusable profiles select the reviewers, models, effort and review lenses.
 
+[![revust terminal view of a saved review: agent table, pane tabs and consolidated findings with severity, location, fix and verdict](docs/images/tui-findings.png)](docs/images/tui-navigation.gif)
+
+A saved demo archive with invented findings. A short
+[navigation GIF](docs/images/tui-navigation.gif) shows pane switching and scrolling.
+
 The Rust engine runs without a desktop application. Optional terminal-host
 adapters present the same review; Guild can also reopen a saved run. Viewing an
 archive never starts a provider or changes its recorded observations.
